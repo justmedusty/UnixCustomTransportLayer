@@ -17,10 +17,6 @@
 */
 
 
-/*
- * This is a standard algorithm for IP checksums.
- */
-
 
 Packet* allocatePacket(){
     Packet *packet = (Packet *) malloc(sizeof (Packet));

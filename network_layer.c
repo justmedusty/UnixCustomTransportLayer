@@ -5,6 +5,12 @@
 #include "network_layer.h"
 
 
+
+/*
+ * This is a standard algorithm for IP checksums.
+ */
+
+
 unsigned short checksum(void *b, int len) {
     // Cast the input pointer to an unsigned short pointer
     unsigned short *buf = b;
