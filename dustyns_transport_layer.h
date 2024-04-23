@@ -30,23 +30,33 @@
 #define SUCCESS 0
 #define ERROR (-1)
 
-void handle_client_connection(int socket);
-uint16_t send_resend(int socket, uint16_t sequence);
-uint16_t send_ack(int socket, uint16_t sequence);
-uint16_t handle_close(int socket);
-
-
 typedef struct Packet {
     struct iphdr ip_header;
     struct iovec iov[2];
 } Packet;
 
+
 typedef struct Header {
     char status[20];
     uint16_t checksum;
     uint16_t sequence;
+    uint16_t msg_size;
 
 } Header;
+
+uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]);
+Packet *allocate_packet();
+uint16_t free_packet(Packet *packet);
+uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum);
+uint16_t calculate_checksum(char *data[], size_t length);
+void handle_client_connection(int socket);
+uint16_t send_resend(int socket, uint16_t sequence);
+uint16_t send_ack(int socket, uint16_t sequence);
+uint16_t handle_close(int socket);
+uint16_t handle_corruption(int socket, struct Header *head);
+
+
+
 
 
 #endif //UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H
