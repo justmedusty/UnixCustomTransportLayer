@@ -2,6 +2,7 @@
 // Created by dustyn on 4/22/24.
 //
 
+#include <stdbool.h>
 #include "dustyns_transport_layer.h"
 
 /*
@@ -18,10 +19,10 @@
 
 
 
-Packet* allocatePacket(){
-    Packet *packet = (Packet *) malloc(sizeof (Packet));
+Packet *allocate_packet() {
+    Packet *packet = (Packet *) malloc(sizeof(Packet));
 
-    if(packet == NULL){
+    if (packet == NULL) {
         perror("malloc");
         return NULL;
     }
@@ -30,7 +31,7 @@ Packet* allocatePacket(){
     packet->iov[1].iov_base = malloc(PACKET_SIZE);
     packet->iov[1].iov_len = PACKET_SIZE;
 
-    if( packet->iov[0].iov_base == NULL ||  packet->iov[1].iov_base == NULL){
+    if (packet->iov[0].iov_base == NULL || packet->iov[1].iov_base == NULL) {
         perror("malloc");
         free(packet->iov[0].iov_base);
         free(packet->iov[1].iov_base);
@@ -39,6 +40,16 @@ Packet* allocatePacket(){
     }
 
     return packet;
+
+}
+
+uint16_t free_packet(Packet *packet) {
+
+    free(packet->iov[0].iov_base);
+    free(packet->iov[1].iov_base);
+    free(packet);
+
+    return 0;
 
 }
 
@@ -81,25 +92,61 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
 
     uint16_t new_checksum = calculate_checksum(&data, length);
     if ((new_checksum ^ received_checksum) != 0) {
-        return (uint8_t) CHECKSUM_NOT_GOOD;
+    return (uint8_t) ERROR;
     } else {
-        return (uint8_t) CHECKSUM_GOOD;
+        return (uint8_t) SUCCESS;
     }
 }
 
 
-// Function to handle ACK event
-void handle_ack(int socket) {
-    // Implement ACK handling logic
+void handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
+    bool sequence_received[MAX_PACKET_COLLECTION + 1] = {false}; // Initialize all to false
+    int last_received = -1;
+
+    // Iterate through each packet in the collection
+    for (int i = 0; i < MAX_PACKET_COLLECTION; ++i) {
+        Packet *packet = packets[i];
+
+        if (packet == NULL) break;
+
+        Header *header = (Header *)packet->iov[0].iov_base;
+        sequence_received[header->sequence] = true;
+        last_received = packet->sequence;
+    }
+
+    // Check for missing packets and send RESEND if needed
+    for (int i = 0; i <= last_received; ++i) {
+        if (!sequence_received[i]) {
+            // Packet with sequence i is missing, send RESEND
+            send_resend(socket, i);
+        }
+    }
 }
 
+uint16_t handle_corruption(int socket, struct Header *head) {
 
-void handle_corruption(int socket, char *data, size_t length, uint16_t received_checksum) {
-    uint16_t checksum = calculate_checksum(&data,length);
-    uint16_t header = htons(checksum);
+    Header header = {
+            CORRUPTION,
+            0,
+            head->sequence
+    };
     struct iovec iov[2];
     iov[0].iov_base = &header;
-    iov[0].iov_len =
+    iov[0].iov_len = sizeof header;
+    iov[1].iov_base = NULL;
+    iov[1].iov_len = 0;
+
+    struct msghdr message;
+    memset(&message, 0, sizeof(message));
+    message.msg_iov = iov;
+    message.msg_iovlen = 1;
+
+    ssize_t bytes_sent = sendmsg(socket, &message, 0);
+    if (bytes_sent < 0) {
+        return ERROR;
+    } else{
+        return header.sequence;
+    }
 
 
 }
@@ -108,6 +155,7 @@ void handle_corruption(int socket, char *data, size_t length, uint16_t received_
 void handle_close(int socket) {
 
 }
+
 /*
  * This is our conn handler function; since we are using raw sockets, there is no transport layer. WE are the transport layer. We will do
  * some basic headers to get some metadata about the incoming messages. There will be no retransmission automatically this is all done by the
@@ -134,7 +182,7 @@ void handle_client_connection(int socket) {
     iov[0].iov_base = &header;
     iov[0].iov_len = HEADER_SIZE;
 
-    iov[1].iov_base = (char*) &welcome_msg;
+    iov[1].iov_base = (char *) &welcome_msg;
     iov[1].iov_len = PACKET_SIZE;
 
 

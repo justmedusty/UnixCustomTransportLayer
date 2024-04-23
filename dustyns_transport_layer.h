@@ -19,14 +19,16 @@
 #define UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H
 
 #define BACKLOG 15
-#define PACKET_SIZE 1024
-#define HEADER_SIZE 256
+#define PACKET_SIZE 512
+#define HEADER_SIZE 64
+#define MAX_PACKET_COLLECTION 1000
 #define ACKNOWLEDGE "ACK"
 #define CORRUPTION "BAD_DATA"
+#define RESEND "RESEND"
 #define CLOSE "DISCONNECT"
-#define TIMEOUT_MICROSECONDS 5000000 // 5 seconds
-#define CHECKSUM_GOOD 0
-#define CHECKSUM_NOT_GOOD (-1)
+#define TIMEOUT_SECONDS 10
+#define SUCCESS 0
+#define ERROR (-1)
 
 void handle_client_connection(int socket);
 
@@ -36,6 +38,7 @@ typedef struct Packet {
 } Packet;
 
 typedef struct Header {
+    char status[20];
     uint16_t checksum;
     uint16_t sequence;
 
