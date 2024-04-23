@@ -31,7 +31,11 @@
 #define ERROR (-1)
 
 void handle_client_connection(int socket);
-int send_resend(int socket, uint16_t sequence);
+uint16_t send_resend(int socket, uint16_t sequence);
+uint16_t send_ack(int socket, uint16_t sequence);
+uint16_t handle_close(int socket);
+
+
 typedef struct Packet {
     struct iphdr ip_header;
     struct iovec iov[2];

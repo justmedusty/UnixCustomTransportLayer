@@ -110,10 +110,16 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
     }
 }
 
+/*
+ * This will inspect an array of packets and make sure that we have all the sequencing correct.
+ * Also sending out RESEND messages to the other side with the packet sequence number that will need to be sent back.
+ */
 
-void handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
+uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
     bool sequence_received[MAX_PACKET_COLLECTION + 1] = {false}; // Initialize all to false
     int last_received = -1;
+    int missing_packets = 0;
+    int highest_packet_received;
 
     // Iterate through each packet in the collection
     for (int i = 0; i < MAX_PACKET_COLLECTION; ++i) {
@@ -124,6 +130,7 @@ void handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
         Header *header = (Header *)packet->iov[0].iov_base;
         sequence_received[header->sequence] = true;
         last_received = header->sequence;
+        highest_packet_received = last_received;
     }
 
     // Check for missing packets and send RESEND if needed
@@ -131,23 +138,68 @@ void handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
         if (!sequence_received[i]) {
             // Packet with sequence i is missing, send RESEND
             send_resend(socket, i);
+            missing_packets +=1;
         }
     }
-}
+    if(missing_packets > 0){
 
-int send_resend(int socket, uint16_t sequence){
+        return missing_packets;
+
+    }else{
+
+        if(send_ack(socket,highest_packet_received) != SUCCESS){
+            return ERROR;
+        }
+
+        return SUCCESS;
+
+    }
+}
+/*
+ * This function is for when a set of packets has been checked properly and an acknowledge can be sent.
+ * Send the acknowledge message to the client side., return SUCCESS or ERROR depending on return value of sendmsg() call
+ */
+uint16_t send_ack(int socket, uint16_t sequence){
+    Header header = {
+            ACKNOWLEDGE,
+            0,
+            sequence
+    };
+    struct iovec iov;
+    iov.iov_base = &header;
+    iov.iov_len = sizeof header;
+
+    struct msghdr message;
+    memset(&message, 0, sizeof(message));
+    message.msg_iov = &iov;
+    message.msg_iovlen = 1;
+
+    ssize_t bytes_sent = sendmsg(socket, &message, 0);
+
+    if (bytes_sent < 0) {
+        return ERROR;
+    } else{
+        return SUCCESS;
+    }
+
+}
+/*
+ *  This function handles sending RESEND packets which will have no body just a header with the RESEND status, and the seq number of the missing packet
+ *  Returns the seq number on success and ERROR otherwise.
+ */
+uint16_t send_resend(int socket, uint16_t sequence){
     Header header = {
             RESEND,
             0,
             sequence
     };
-    struct iovec iov[2];
-    iov[0].iov_base = &header;
-    iov[0].iov_len = sizeof header;
+    struct iovec iov;
+    iov.iov_base = &header;
+    iov.iov_len = sizeof header;
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = iov;
+    message.msg_iov = &iov;
     message.msg_iovlen = 1;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
@@ -173,9 +225,9 @@ uint16_t handle_corruption(int socket, struct Header *head) {
             0,
             head->sequence
     };
-    struct iovec iov[2];
-    iov[0].iov_base = &header;
-    iov[0].iov_len = sizeof header;
+    struct iovec iov;
+    iov.iov_base = &header;
+    iov.iov_len = sizeof header;
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
@@ -191,8 +243,33 @@ uint16_t handle_corruption(int socket, struct Header *head) {
 
 }
 
-// Function to handle close event
-void handle_close(int socket) {
+/*
+ * Function to handle sending a connection closed message to the client side of the conn
+ */
+uint16_t handle_close(int socket) {
+
+    Header header = {
+            CLOSE,
+            0,
+            0
+    };
+
+    struct iovec iov;
+    iov.iov_base = &header;
+    iov.iov_len = sizeof header;
+
+    struct msghdr message;
+    memset(&message, 0, sizeof(message));
+    message.msg_iov = iov;
+    message.msg_iovlen = 1;
+
+    ssize_t bytes_sent = sendmsg(socket, &message, 0);
+    if (bytes_sent < 0) {
+        return ERROR;
+    } else{
+        return SUCCESS;
+    }
+
 
 }
 
