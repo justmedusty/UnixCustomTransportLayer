@@ -6,7 +6,7 @@
 #include "dustyns_transport_layer.h"
 
 /*
- * Raw sockets are a powerful feature in UNIX. Raw sockets remove the kernels implementation
+ * Raw sockets are a powerful feature in UNIX. Raw sockets remove the kernels' implementation
  * of the network layer protocols from the equation, and what you end up with is your own transport
  * level playground. Because we will be handling the entire transport layer, we will use sendmsg and recvmsg instead of our usual send/recv.
  * sendmsg and recvmsg alongside a msgheader structure. Because we will be working with the network layer directly here,
@@ -42,16 +42,28 @@ Packet *allocate_packet() {
     return packet;
 
 }
-
+/*
+ * Free packet from heap memory, check that it is not null to avoid dereferencing a null pointer, set each packet to null afterwards
+ * to make sure there are no double frees.
+ */
 uint16_t free_packet(Packet *packet) {
+    if (packet == NULL) {
+        return ERROR;
+    }
+    if (packet->iov[0].iov_base != NULL) {
+        free(packet->iov[0].iov_base);
+        packet->iov[0].iov_base = NULL;
+    }
 
-    free(packet->iov[0].iov_base);
-    free(packet->iov[1].iov_base);
+    if (packet->iov[1].iov_base != NULL) {
+        free(packet->iov[1].iov_base);
+        packet->iov[1].iov_base = NULL;
+    }
+
     free(packet);
-
-    return 0;
-
+    return SUCCESS;
 }
+
 
 
 /*
@@ -111,7 +123,7 @@ void handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
 
         Header *header = (Header *)packet->iov[0].iov_base;
         sequence_received[header->sequence] = true;
-        last_received = packet->sequence;
+        last_received = header->sequence;
     }
 
     // Check for missing packets and send RESEND if needed
@@ -123,6 +135,37 @@ void handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
     }
 }
 
+int send_resend(int socket, uint16_t sequence){
+    Header header = {
+            RESEND,
+            0,
+            sequence
+    };
+    struct iovec iov[2];
+    iov[0].iov_base = &header;
+    iov[0].iov_len = sizeof header;
+
+    struct msghdr message;
+    memset(&message, 0, sizeof(message));
+    message.msg_iov = iov;
+    message.msg_iovlen = 1;
+
+    ssize_t bytes_sent = sendmsg(socket, &message, 0);
+
+    if (bytes_sent < 0) {
+        return ERROR;
+    } else{
+        return header.sequence;
+    }
+
+}
+/*
+ * If we notice a bad payload via XORing and comparing with the checksum, we want to fire off a packet with the status
+ * CORRUPTION.
+ * The client raw socket will check for and then read the sequence from that header, and if there is a CORRUPTION
+ * header, then the client will read the sequence and resend that packet
+ */
+
 uint16_t handle_corruption(int socket, struct Header *head) {
 
     Header header = {
@@ -133,8 +176,6 @@ uint16_t handle_corruption(int socket, struct Header *head) {
     struct iovec iov[2];
     iov[0].iov_base = &header;
     iov[0].iov_len = sizeof header;
-    iov[1].iov_base = NULL;
-    iov[1].iov_len = 0;
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
@@ -147,7 +188,6 @@ uint16_t handle_corruption(int socket, struct Header *head) {
     } else{
         return header.sequence;
     }
-
 
 }
 
