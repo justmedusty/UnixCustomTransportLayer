@@ -3,7 +3,7 @@ project(UnixCustomTransportLayer C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(UnixCustomTransportLayer main.c
+add_executable(UnixCustomTransportLayer server_main.c
         network_layer.c
         network_layer.h
         dustyns_transport_layer.c

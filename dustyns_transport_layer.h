@@ -22,13 +22,16 @@
 #define PACKET_SIZE 512
 #define HEADER_SIZE 64
 #define MAX_PACKET_COLLECTION 1000
+#define OUT_OF_BAND_DATA_SIZE 1
 #define ACKNOWLEDGE "ACK"
 #define CORRUPTION "BAD_DATA"
 #define RESEND "RESEND"
 #define CLOSE "DISCONNECT"
+#define OOB "OUT_OF_BAND"
 #define TIMEOUT_SECONDS 10
 #define SUCCESS 0
 #define ERROR (-1)
+
 
 typedef struct Packet {
     struct iphdr ip_header;

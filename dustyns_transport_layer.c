@@ -19,6 +19,11 @@
 
 
 
+/*
+ * Allocate a packet on the heap , being sure to allocate both io vectors inside the packet as well
+ * We need to do a standard null check to ensure that allocation is not returning a null pointer
+ */
+
 Packet *allocate_packet() {
     Packet *packet = (Packet *) malloc(sizeof(Packet));
 
@@ -159,11 +164,11 @@ uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
  * This function is for when a set of packets has been checked properly and an acknowledge can be sent.
  * Send the acknowledge message to the client side., return SUCCESS or ERROR depending on return value of sendmsg() call
  */
-uint16_t send_ack(int socket, uint16_t sequence){
+uint16_t send_ack(int socket, uint16_t max_sequence){
     Header header = {
             ACKNOWLEDGE,
             0,
-            sequence
+            max_sequence
     };
     struct iovec iov;
     iov.iov_base = &header;
@@ -231,7 +236,7 @@ uint16_t handle_corruption(int socket, struct Header *head) {
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = iov;
+    message.msg_iov = &iov;
     message.msg_iovlen = 1;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
@@ -240,8 +245,41 @@ uint16_t handle_corruption(int socket, struct Header *head) {
     } else{
         return header.sequence;
     }
-
 }
+/*
+ * This function will send out of band data , which is akin to a network interrupt if you will. We will
+ * allow 1 byte of OOB data to be send, could be some kind of escape or abort signal. OOB data is supposed to skip the queue
+ * and come off the wire and be processed before anything else.
+ */
+uint16_t send_oob_data(int socket, char oob_char){
+
+    Header header = {
+            OOB,
+            0,
+            0,
+            OUT_OF_BAND_DATA_SIZE,
+    };
+
+    struct iovec iov;
+    iov.iov_base = &header;
+    iov.iov_len = sizeof header;
+    iov.iov_base = &oob_char;
+    iov.iov_len = OUT_OF_BAND_DATA_SIZE;
+
+    struct msghdr message;
+    memset(&message, 0, sizeof(message));
+    message.msg_iov = &iov;
+    message.msg_iovlen = 2;
+
+    ssize_t bytes_sent = sendmsg(socket, &message, 0);
+    if (bytes_sent < 0) {
+        return ERROR;
+
+    } else{
+        return SUCCESS;
+    }
+}
+
 
 /*
  * Function to handle sending a connection closed message to the client side of the conn
@@ -260,7 +298,7 @@ uint16_t handle_close(int socket) {
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = iov;
+    message.msg_iov = &iov;
     message.msg_iovlen = 1;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
