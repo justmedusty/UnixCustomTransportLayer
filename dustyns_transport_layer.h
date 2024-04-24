@@ -24,6 +24,7 @@
 #define PACKET_SIZE ((sizeof (struct iphdr) + HEADER_SIZE + PAYLOAD_SIZE))
 #define MAX_PACKET_COLLECTION 1000
 #define OUT_OF_BAND_DATA_SIZE 1
+#define DATA "DATA"
 #define ACKNOWLEDGE "ACK"
 #define CORRUPTION "BAD_DATA"
 #define RESEND "RESEND"

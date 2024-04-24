@@ -73,6 +73,57 @@ uint16_t free_packet(Packet *packet) {
 }
 
 /*
+ * I'm making up words here I know, deal with it. this will take your data buffer and your
+ * preallocated, initialized packet array and fill an array with packet data. We will break everything
+ * down into packets of PAYLOAD_SIZE to a maximum amount of packets MAX_PACKET_COLLECTION, sequence them properly,
+ * include proper message size, provide a checksum for the data, fill in the layer 3 header.
+ */
+uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, char *src_ip, char *dest_ip) {
+
+    if (packet_array_len > MAX_PACKET_COLLECTION) {
+        return -ERROR;
+    }
+
+    uint16_t packets_filled = -ERROR;
+
+    size_t source_length = strlen(data_buff);
+    size_t remaining_bytes = source_length;
+
+    for (int i = 0; i < packet_array_len; ++i) {
+
+        char packet_buff[PAYLOAD_SIZE];
+
+        size_t bytes_copied;
+        fill_ip_header(&packet[i].ip_header, src_ip, dest_ip);
+
+        size_t bytes_to_copy = remaining_bytes > PAYLOAD_SIZE ? PAYLOAD_SIZE : remaining_bytes;
+
+        memcpy(packet_buff, data_buff + (source_length - remaining_bytes), bytes_to_copy);
+
+        memcpy(packet[i].iov[1].iov_base, packet_buff, bytes_to_copy);
+
+        remaining_bytes -= bytes_to_copy;
+
+        Header header = {
+                DATA,
+                calculate_checksum(packet[i].iov[1].iov_base, bytes_to_copy),
+                i,
+                sizeof bytes_to_copy
+        };
+
+
+        packet[i].iov[0].iov_base = &header;
+
+
+        packets_filled = i;
+
+
+    }
+    return packets_filled;
+
+}
+
+/*
  * This will set the alarm for a packet timeout
  * A custom timer is allowed, however, the default will be
  * the value of the TIMEOUT macro. This will set an alarm
@@ -113,11 +164,12 @@ uint16_t set_packet_timeout(int custom_timer, int num_timeouts) {
         }
     }
 }
+
 /*
  * This function simply resets the alarm once we have received an ACK on the series of packets we just sent.
  * We will also need a signal handler to handle
  */
-void reset_timeout(){
+void reset_timeout() {
     alarm(0);
 }
 
