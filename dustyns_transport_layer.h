@@ -28,9 +28,12 @@
 #define RESEND "RESEND"
 #define CLOSE "DISCONNECT"
 #define OOB "OUT_OF_BAND"
-#define TIMEOUT_SECONDS 10
+#define CONNECTION_CLOSED 2
+#define INITIAL_TIMEOUT 10
+#define MAX_TIMEOUT 120
+
 #define SUCCESS 0
-#define ERROR (-1)
+#define ERROR 1
 
 
 typedef struct Packet {

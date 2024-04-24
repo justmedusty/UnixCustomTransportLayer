@@ -4,6 +4,7 @@
 
 #include <stdbool.h>
 #include "dustyns_transport_layer.h"
+#include "network_layer.h"
 
 /*
  * Raw sockets are a powerful feature in UNIX. Raw sockets remove the kernels' implementation
@@ -31,6 +32,7 @@ Packet *allocate_packet() {
         perror("malloc");
         return NULL;
     }
+    packet->ip_header = malloc(sizeof(struct iphdr));
     packet->iov[0].iov_base = malloc(HEADER_SIZE);
     packet->iov[0].iov_len = HEADER_SIZE;
     packet->iov[1].iov_base = malloc(PACKET_SIZE);
@@ -47,6 +49,7 @@ Packet *allocate_packet() {
     return packet;
 
 }
+
 /*
  * Free packet from heap memory, check that it is not null to avoid dereferencing a null pointer, set each packet to null afterwards
  * to make sure there are no double frees.
@@ -69,6 +72,47 @@ uint16_t free_packet(Packet *packet) {
     return SUCCESS;
 }
 
+/*
+ * This will set the alarm for a packet timeout
+ * A custom timer is allowed, however, the default will be
+ * the value of the TIMEOUT macro. This will set an alarm
+ * and if the system does not receive an ack in the given
+ * timeframe, a sigalrm will be sent by the kernel to alert us
+ * We can implement exponential back off as well.
+ * Exponential backoff means each timeout we double the timeout
+ * period. This can be useful to conserve resources and ensure any issues are resolved.
+ * If not we will abort the sending of this packet set.
+ *
+ * Exponential backoff is a method to ensure we are not being too
+ * aggressive and allowing time for any network issues to pass
+ * This can relieve issues such as bogging the network / congestion.
+ */
+uint16_t set_packet_timeout(int custom_timer, int num_timeouts) {
+
+    if (custom_timer != NULL && custom_timer > 0 && custom_timer < MAX_TIMEOUT) {
+        alarm(custom_timer);
+        return custom_timer;
+    } else {
+        if (num_timeouts == 0) {
+            alarm(INITIAL_TIMEOUT);
+            return INITIAL_TIMEOUT;
+        } else {
+            uint16_t timeout_value = (INITIAL_TIMEOUT);
+
+            for (int i = 0; i < num_timeouts; ++i) {
+                timeout_value *= 2;
+            }
+
+            if (timeout_value < MAX_TIMEOUT) {
+                alarm(timeout_value);
+                return timeout_value;
+            } else {
+                return -ERROR;
+            }
+
+        }
+    }
+}
 
 
 /*
@@ -109,7 +153,7 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
 
     uint16_t new_checksum = calculate_checksum(&data, length);
     if ((new_checksum ^ received_checksum) != 0) {
-    return (uint8_t) ERROR;
+        return (uint8_t) ERROR;
     } else {
         return (uint8_t) SUCCESS;
     }
@@ -132,7 +176,7 @@ uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
 
         if (packet == NULL) break;
 
-        Header *header = (Header *)packet->iov[0].iov_base;
+        Header *header = (Header *) packet->iov[0].iov_base;
         sequence_received[header->sequence] = true;
         last_received = header->sequence;
         highest_packet_received = last_received;
@@ -143,16 +187,16 @@ uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
         if (!sequence_received[i]) {
             // Packet with sequence i is missing, send RESEND
             send_resend(socket, i);
-            missing_packets +=1;
+            missing_packets += 1;
         }
     }
-    if(missing_packets > 0){
+    if (missing_packets > 0) {
 
         return missing_packets;
 
-    }else{
+    } else {
 
-        if(send_ack(socket,highest_packet_received) != SUCCESS){
+        if (send_ack(socket, highest_packet_received) != SUCCESS) {
             return ERROR;
         }
 
@@ -160,15 +204,17 @@ uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
 
     }
 }
+
 /*
  * This function is for when a set of packets has been checked properly and an acknowledge can be sent.
  * Send the acknowledge message to the client side., return SUCCESS or ERROR depending on return value of sendmsg() call
  */
-uint16_t send_ack(int socket, uint16_t max_sequence){
+uint16_t send_ack(int socket, uint16_t max_sequence) {
     Header header = {
             ACKNOWLEDGE,
             0,
-            max_sequence
+            max_sequence,
+            0
     };
     struct iovec iov;
     iov.iov_base = &header;
@@ -183,16 +229,17 @@ uint16_t send_ack(int socket, uint16_t max_sequence){
 
     if (bytes_sent < 0) {
         return ERROR;
-    } else{
+    } else {
         return SUCCESS;
     }
 
 }
+
 /*
  *  This function handles sending RESEND packets which will have no body just a header with the RESEND status, and the seq number of the missing packet
  *  Returns the seq number on success and ERROR otherwise.
  */
-uint16_t send_resend(int socket, uint16_t sequence){
+uint16_t send_resend(int socket, uint16_t sequence) {
     Header header = {
             RESEND,
             0,
@@ -211,11 +258,12 @@ uint16_t send_resend(int socket, uint16_t sequence){
 
     if (bytes_sent < 0) {
         return ERROR;
-    } else{
+    } else {
         return header.sequence;
     }
 
 }
+
 /*
  * If we notice a bad payload via XORing and comparing with the checksum, we want to fire off a packet with the status
  * CORRUPTION.
@@ -242,16 +290,17 @@ uint16_t handle_corruption(int socket, struct Header *head) {
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
     if (bytes_sent < 0) {
         return ERROR;
-    } else{
+    } else {
         return header.sequence;
     }
 }
+
 /*
  * This function will send out of band data , which is akin to a network interrupt if you will. We will
  * allow 1 byte of OOB data to be send, could be some kind of escape or abort signal. OOB data is supposed to skip the queue
  * and come off the wire and be processed before anything else.
  */
-uint16_t send_oob_data(int socket, char oob_char){
+uint16_t send_oob_data(int socket, char oob_char) {
 
     Header header = {
             OOB,
@@ -275,7 +324,7 @@ uint16_t send_oob_data(int socket, char oob_char){
     if (bytes_sent < 0) {
         return ERROR;
 
-    } else{
+    } else {
         return SUCCESS;
     }
 }
@@ -288,6 +337,7 @@ uint16_t handle_close(int socket) {
 
     Header header = {
             CLOSE,
+            0,
             0,
             0
     };
@@ -304,10 +354,9 @@ uint16_t handle_close(int socket) {
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
     if (bytes_sent < 0) {
         return ERROR;
-    } else{
+    } else {
         return SUCCESS;
     }
-
 
 }
 
