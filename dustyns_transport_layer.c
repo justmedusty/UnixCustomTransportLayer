@@ -21,7 +21,7 @@
 
 
 /*
- * Allocate a packet on the heap , being sure to allocate both io vectors inside the packet as well
+ * Allocate a packet on the heap, being sure to allocate both io vectors inside the packet as well
  * We need to do a standard null check to ensure that allocation is not returning a null pointer
  */
 
@@ -35,8 +35,8 @@ Packet *allocate_packet() {
     packet->ip_header = malloc(sizeof(struct iphdr));
     packet->iov[0].iov_base = malloc(HEADER_SIZE);
     packet->iov[0].iov_len = HEADER_SIZE;
-    packet->iov[1].iov_base = malloc(PACKET_SIZE);
-    packet->iov[1].iov_len = PACKET_SIZE;
+    packet->iov[1].iov_base = malloc(PAYLOAD_SIZE);
+    packet->iov[1].iov_len = PAYLOAD_SIZE;
 
     if (packet->iov[0].iov_base == NULL || packet->iov[1].iov_base == NULL) {
         perror("malloc");
@@ -112,6 +112,13 @@ uint16_t set_packet_timeout(int custom_timer, int num_timeouts) {
 
         }
     }
+}
+/*
+ * This function simply resets the alarm once we have received an ACK on the series of packets we just sent.
+ * We will also need a signal handler to handle
+ */
+void reset_timeout(){
+    alarm(0);
 }
 
 
@@ -331,7 +338,9 @@ uint16_t send_oob_data(int socket, char oob_char) {
 
 
 /*
- * Function to handle sending a connection closed message to the client side of the conn
+ * Function to handle sending a connection closed message to the client side of the conn.
+ * This will be used to let the other side of the association know that the connection
+ * is being closed so it can close the connection and clean up.
  */
 uint16_t handle_close(int socket) {
 
@@ -375,7 +384,7 @@ uint16_t handle_close(int socket) {
  */
 
 void handle_client_connection(int socket) {
-    char msg_buffer[PACKET_SIZE];
+    char msg_buffer[PAYLOAD_SIZE];
     char hdr_buffer[HEADER_SIZE];
     struct msghdr;
     struct iovec iov[2];
@@ -387,7 +396,7 @@ void handle_client_connection(int socket) {
     iov[0].iov_len = HEADER_SIZE;
 
     iov[1].iov_base = (char *) &welcome_msg;
-    iov[1].iov_len = PACKET_SIZE;
+    iov[1].iov_len = PAYLOAD_SIZE;
 
 
 }

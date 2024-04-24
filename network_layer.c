@@ -8,6 +8,9 @@
 
 /*
  * This is a standard algorithm for IP checksums.
+ * We will use to verify layer 3 headers to ensure
+ * that the IP header has not been corrupted during
+ * transport.If it is no good, the packet will be thrown out.
  */
 
 
@@ -42,4 +45,30 @@ unsigned short checksum(void *b, int len) {
 
     // Return the checksum result
     return result;
+}
+
+/*
+ * Since we are using IPPROTO_RAW, we will need to fill out IP headers ourselves here.
+ * We will need to do our own checksums as well. We need to specify the source ip, the dest ip,
+ * the ttl, the version, the packet size, everything!
+ *
+ * In the end, we will fill in our ip_header checksum for verification of the IP header at layer 3.
+ */
+
+void fill_ip_header(struct iphdr *ip_header, char *src_ip, char *dst_ip) {
+    ip_header->ihl = 5; // Header length (in 32-bit words)
+    ip_header->version = 4; // IPv4
+    ip_header->tos = 0; // Type of service
+    ip_header->tot_len = htons(PACKET_SIZE); // Total length of the packet
+    ip_header->id = htons(12345); // Identification
+    ip_header->frag_off = 0; // Fragmentation offset
+    ip_header->ttl = 64; // Time to live
+    ip_header->protocol = IPPROTO_RAW; // Protocol
+    ip_header->check = 0; // Checksum (0 for now, will be calculated later)
+    ip_header->saddr = inet_addr(src_ip); // Source IP address
+    ip_header->daddr = inet_addr(dst_ip); // Destination IP address
+
+    ip_header->check = checksum(ip_header, sizeof(struct iphdr));
+
+
 }
