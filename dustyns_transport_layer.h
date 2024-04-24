@@ -32,15 +32,14 @@
 #define OOB "OUT_OF_BAND"
 #define CONNECTION_CLOSED 2
 #define INITIAL_TIMEOUT 10
-#define MAX_TIMEOUT 120
+#define MAX_TIMEOUT 160
 
 #define SUCCESS 0
 #define ERROR 1
 
 
 typedef struct Packet {
-    struct iphdr ip_header;
-    struct iovec iov[2];
+    struct iovec iov[3];
 } Packet;
 
 

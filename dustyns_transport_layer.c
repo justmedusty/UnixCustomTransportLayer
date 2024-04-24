@@ -32,11 +32,12 @@ Packet *allocate_packet() {
         perror("malloc");
         return NULL;
     }
-    packet->ip_header = malloc(sizeof(struct iphdr));
-    packet->iov[0].iov_base = malloc(HEADER_SIZE);
-    packet->iov[0].iov_len = HEADER_SIZE;
-    packet->iov[1].iov_base = malloc(PAYLOAD_SIZE);
-    packet->iov[1].iov_len = PAYLOAD_SIZE;
+    packet->iov[0].iov_base = malloc(sizeof(struct iphdr));
+    packet->iov[0].iov_len = sizeof (struct iphdr);
+    packet->iov[1].iov_base = malloc(HEADER_SIZE);
+    packet->iov[1].iov_len = HEADER_SIZE;
+    packet->iov[2].iov_base = malloc(PAYLOAD_SIZE);
+    packet->iov[2].iov_len = PAYLOAD_SIZE;
 
     if (packet->iov[0].iov_base == NULL || packet->iov[1].iov_base == NULL) {
         perror("malloc");
@@ -66,6 +67,11 @@ uint16_t free_packet(Packet *packet) {
     if (packet->iov[1].iov_base != NULL) {
         free(packet->iov[1].iov_base);
         packet->iov[1].iov_base = NULL;
+    }
+
+    if (packet->iov[2].iov_base != NULL) {
+        free(packet->iov[2].iov_base);
+        packet->iov[2].iov_base = NULL;
     }
 
     free(packet);
@@ -102,7 +108,7 @@ uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array
         char packet_buff[PAYLOAD_SIZE];
 
         size_t bytes_copied;
-        fill_ip_header(&packet[i].ip_header, src_ip, dest_ip);
+        fill_ip_header(packet->iov[0].iov_base, src_ip, dest_ip);
 
         /*  Calculate the number of bytes to copy into this packet.
             If the remaining bytes to copy (remaining_bytes) is greater than the size of the payload buffer (PAYLOAD_SIZE),
@@ -432,7 +438,6 @@ uint16_t handle_close(int socket) {
     } else {
         return SUCCESS;
     }
-
 }
 
 /*
