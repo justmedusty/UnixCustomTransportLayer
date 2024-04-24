@@ -8,8 +8,8 @@
 
 /*
  * Raw sockets are a powerful feature in UNIX. Raw sockets remove the kernels' implementation
- * of the network layer protocols from the equation, and what you end up with is your own transport
- * level playground. Because we will be handling the entire transport layer, we will use sendmsg and recvmsg instead of our usual send/recv.
+ * of the transport layer protocols from the equation, and what you end up with is your own transport
+ * layer playground. Using IPPROTO_RAW also allows us to interact with layer 3 directly. Because we will be handling the entire transport layer, we will use sendmsg and recvmsg instead of our usual send/recv.
  * sendmsg and recvmsg alongside a msgheader structure. Because we will be working with the network layer directly here,
  * we will need to pass message metadata in headers such as its size and maybe some kind of packet identifier for acknowledgement
  * from the receiver. We will go through this together.
