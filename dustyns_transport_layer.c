@@ -80,21 +80,35 @@ uint16_t free_packet(Packet *packet) {
  */
 uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, char *src_ip, char *dest_ip) {
 
+    //Check they are not passing a packet array larger than the max
     if (packet_array_len > MAX_PACKET_COLLECTION) {
         return -ERROR;
     }
-
+    //Init to error code so we know something went wrong if it returns with this value
     uint16_t packets_filled = -ERROR;
 
+    //Getting the length of the buffer we are going to packet-ize
     size_t source_length = strlen(data_buff);
+
+    //This will track how many bytes we have left to packet-ize
     size_t remaining_bytes = source_length;
 
+    /*
+     * A loop for iterating through each packet and filling the ip header,
+     * the transport header, the transport data, all the while we will set the packets_filled each time to the new number of packets filled
+     */
     for (int i = 0; i < packet_array_len; ++i) {
 
         char packet_buff[PAYLOAD_SIZE];
 
         size_t bytes_copied;
         fill_ip_header(&packet[i].ip_header, src_ip, dest_ip);
+
+        /*  Calculate the number of bytes to copy into this packet.
+            If the remaining bytes to copy (remaining_bytes) is greater than the size of the payload buffer (PAYLOAD_SIZE),
+            set bytes_to_copy to PAYLOAD_SIZE, indicating that a full payload buffer is copied.
+            Otherwise, set bytes_to_copy to the remaining_bytes, ensuring that only the remaining data is copied into the payload buffer.
+        */
 
         size_t bytes_to_copy = remaining_bytes > PAYLOAD_SIZE ? PAYLOAD_SIZE : remaining_bytes;
 
