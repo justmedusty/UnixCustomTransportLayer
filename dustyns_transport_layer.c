@@ -77,7 +77,6 @@ uint16_t free_packet(Packet *packet) {
     free(packet);
     return SUCCESS;
 }
-
 /*
  * I'm making up words here I know, deal with it. this will take your data buffer and your
  * preallocated, initialized packet array and fill an array with packet data. We will break everything
@@ -191,6 +190,19 @@ uint16_t set_packet_timeout(int custom_timer, int num_timeouts) {
  */
 void reset_timeout() {
     alarm(0);
+}
+
+void sigalrm_handler(uint16_t num_timeouts,Packet packet[]){
+
+    uint16_t timeout = INITIAL_TIMEOUT;
+    for(int i = 0;i<num_timeouts;i++){
+        timeout *=2;
+    }
+    if(timeout > MAX_TIMEOUT){
+
+    }
+
+
 }
 
 
@@ -438,6 +450,31 @@ uint16_t handle_close(int socket) {
     } else {
         return SUCCESS;
     }
+}
+
+void get_transport_packet_wire_ready(struct iovec iov[3]){
+
+    Header *header = (Header *) iov[1].iov_base;
+    header->sequence = htons( header->sequence);
+    header->checksum = htons( header->checksum);
+    header->msg_size = htons( header->msg_size);
+
+    iov[1].iov_base = header;
+
+
+}
+
+
+void get_transport_packet_host_ready(struct iovec iov[3]){
+
+    Header *header = (Header *) iov[1].iov_base;
+    header->sequence = ntohs( header->sequence);
+    header->checksum = ntohs( header->checksum);
+    header->msg_size = ntohs( header->msg_size);
+
+    iov[1].iov_base = header;
+
+
 }
 
 /*
