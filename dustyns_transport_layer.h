@@ -30,7 +30,6 @@
 #define RESEND "RESEND"
 #define CLOSE "DISCONNECT"
 #define OOB "OUT_OF_BAND"
-#define CONNECTION_CLOSED 2
 #define INITIAL_TIMEOUT 10
 #define MAX_TIMEOUT 160
 
@@ -80,6 +79,10 @@ uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array
 void get_transport_packet_host_ready(struct iovec iov[3]);
 
 void get_transport_packet_wire_ready(struct iovec iov[3]);
+
+uint16_t send_oob_data(int socket, char oob_char);
+
+uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[]);
 
 
 #endif //UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H

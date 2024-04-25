@@ -33,7 +33,7 @@ Packet *allocate_packet() {
         return NULL;
     }
     packet->iov[0].iov_base = malloc(sizeof(struct iphdr));
-    packet->iov[0].iov_len = sizeof (struct iphdr);
+    packet->iov[0].iov_len = sizeof(struct iphdr);
     packet->iov[1].iov_base = malloc(HEADER_SIZE);
     packet->iov[1].iov_len = HEADER_SIZE;
     packet->iov[2].iov_base = malloc(PAYLOAD_SIZE);
@@ -77,6 +77,7 @@ uint16_t free_packet(Packet *packet) {
     free(packet);
     return SUCCESS;
 }
+
 /*
  * I'm making up words here I know, deal with it. this will take your data buffer and your
  * preallocated, initialized packet array and fill an array with packet data. We will break everything
@@ -192,14 +193,18 @@ void reset_timeout() {
     alarm(0);
 }
 
-void sigalrm_handler(uint16_t num_timeouts,Packet packet[]){
+uint16_t sigalrm_handler(uint16_t num_timeouts, Packet packet[MAX_PACKET_COLLECTION]) {
 
     uint16_t timeout = INITIAL_TIMEOUT;
-    for(int i = 0;i<num_timeouts;i++){
-        timeout *=2;
+    for (int i = 0; i < num_timeouts; i++) {
+        timeout *= 2;
     }
-    if(timeout > MAX_TIMEOUT){
+    if (timeout > MAX_TIMEOUT) {
 
+        return -ERROR;
+
+    } else {
+        return timeout;
     }
 
 
@@ -291,6 +296,7 @@ uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
             return ERROR;
         }
 
+        reset_timeout();
         return SUCCESS;
 
     }
@@ -452,12 +458,18 @@ uint16_t handle_close(int socket) {
     }
 }
 
-void get_transport_packet_wire_ready(struct iovec iov[3]){
+
+/*
+ * These two functions will swap the endianness coming on and coming off the wire.
+ * The network byte order is big endian, so this is standard practice.
+ */
+
+void get_transport_packet_wire_ready(struct iovec iov[3]) {
 
     Header *header = (Header *) iov[1].iov_base;
-    header->sequence = htons( header->sequence);
-    header->checksum = htons( header->checksum);
-    header->msg_size = htons( header->msg_size);
+    header->sequence = htons(header->sequence);
+    header->checksum = htons(header->checksum);
+    header->msg_size = htons(header->msg_size);
 
     iov[1].iov_base = header;
 
@@ -465,15 +477,48 @@ void get_transport_packet_wire_ready(struct iovec iov[3]){
 }
 
 
-void get_transport_packet_host_ready(struct iovec iov[3]){
+void get_transport_packet_host_ready(struct iovec iov[3]) {
 
     Header *header = (Header *) iov[1].iov_base;
-    header->sequence = ntohs( header->sequence);
-    header->checksum = ntohs( header->checksum);
-    header->msg_size = ntohs( header->msg_size);
+    header->sequence = ntohs(header->sequence);
+    header->checksum = ntohs(header->checksum);
+    header->msg_size = ntohs(header->msg_size);
 
     iov[1].iov_base = header;
 
+
+}
+
+/*
+ * This function will send an array of packets 1 by one once they have been set up properly. It will log how many failed packets there were.
+ * so we can know what to expect. We will get a resend from the otherside of the association once the packets have been rounded up and counted.
+ * On send we will start a timer based on the current number of timeouts.
+ *
+ * Remember, we are using exponential backoff. Every timeout with the same packet set, we double the timeout length.
+ */
+uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[]) {
+
+    int failed_packets = 0;
+    int failed_packet_seq[MAX_PACKET_COLLECTION];
+
+    for (int i = 0; i < num_packets; i++) {
+        struct msghdr msg_hdr;
+        memset(&msg_hdr, 0, sizeof(msg_hdr));
+
+        // Populate msghdr
+        msg_hdr.msg_iov = packets[i].iov;
+        msg_hdr.msg_iovlen = 3; // Number of iovs
+        if (sendmsg(socket, &msg_hdr, 0) == -1) {
+            failed_packets++;
+            /*
+             * We want to be able to go through after and resend.
+             */
+            failed_packet_seq[failed_packets - 1] = i;
+        }
+    }
+    set_packet_timeout(0, num_timeouts);
+
+    return failed_packets;
 
 }
 
