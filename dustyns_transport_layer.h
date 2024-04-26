@@ -52,7 +52,7 @@ typedef struct Header {
 
 uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]);
 
-Packet *allocate_packet();
+uint16_t allocate_packet(Packet *packet);
 
 uint16_t free_packet(Packet *packet);
 
@@ -82,9 +82,9 @@ void get_transport_packet_wire_ready(struct iovec iov[3]);
 
 uint16_t send_oob_data(int socket, char oob_char);
 
-uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[],
-                                int failed_packet_seq[PACKET_SIZE]);
 
-void sigalrm_handler(uint16_t *num_timeouts, Packet packet[MAX_PACKET_COLLECTION]);
+uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets[], int failed_packet_seq[PACKET_SIZE]);
+
+void sigalrm_handler();
 
 #endif //UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H

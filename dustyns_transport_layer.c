@@ -25,13 +25,14 @@
  * We need to do a standard null check to ensure that allocation is not returning a null pointer
  */
 
-Packet *allocate_packet() {
-    Packet *packet = malloc(sizeof(struct Packet));
+uint16_t num_timeouts;
+
+uint16_t allocate_packet(Packet *packet) {
+    packet = malloc(sizeof(Packet));
 
     if (packet == NULL) {
         perror("malloc");
-        free(packet);
-        return NULL;
+        return ERROR;
     }
     packet->iov[0].iov_base = malloc(sizeof(struct iphdr));
     packet->iov[0].iov_len = sizeof(struct iphdr);
@@ -44,10 +45,10 @@ Packet *allocate_packet() {
     if (packet->iov[0].iov_base == NULL || packet->iov[1].iov_base == NULL || packet->iov[2].iov_base == NULL) {
         perror("malloc");
         free_packet(packet);
-        return NULL;
+        return ERROR;
     }
 
-    return packet;
+    return SUCCESS;
 
 }
 
@@ -190,17 +191,17 @@ void reset_timeout() {
     alarm(0);
 }
 
-void sigalrm_handler(uint16_t *num_timeouts, Packet packet[MAX_PACKET_COLLECTION]) {
+void sigalrm_handler() {
 
     uint16_t timeout = INITIAL_TIMEOUT;
-    for (int i = 0; i < *num_timeouts; i++) {
+    for (int i = 0; i < num_timeouts; i++) {
         timeout *= 2;
     }
     if (timeout > MAX_TIMEOUT) {
         fprintf(stderr, "Max timeout reached\n");
         exit(EXIT_FAILURE);
     } else {
-        set_packet_timeout(0, *num_timeouts);
+        set_packet_timeout(0, num_timeouts);
     }
 
 
@@ -494,7 +495,7 @@ void get_transport_packet_host_ready(struct iovec iov[3]) {
  */
 
 
-uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[],
+uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets[],
                                 int failed_packet_seq[PACKET_SIZE]) {
 
     memset(failed_packet_seq, 0, PACKET_SIZE);
@@ -541,8 +542,17 @@ void handle_client_connection(int socket, char src_ip[], char dest_ip[]) {
     Packet received_packets[MAX_PACKET_COLLECTION];
 
     for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
-        packet[i] = *allocate_packet();
-        received_packets[i] = *allocate_packet();
+        uint16_t result;
+        result = allocate_packet(&packet[i]);
+        if(result == ERROR){
+            fprintf(stderr,"Error allocing packet %d\n",i);
+            exit(EXIT_FAILURE);
+        }
+        result = allocate_packet(&received_packets[i]);
+        if(result == ERROR){
+            fprintf(stderr,"Error allocing received packet %d\n",i);
+            exit(EXIT_FAILURE);
+        }
     }
     int failed_packet_seq[PACKET_SIZE];
 
@@ -558,12 +568,11 @@ void handle_client_connection(int socket, char src_ip[], char dest_ip[]) {
         return;
     }
 
-    int num_timeouts = 0;
     uint16_t failed_packets = 0;
-    signal(SIGALRM, sigalrm_handler(num_timeouts, packet));
+    signal(SIGALRM, sigalrm_handler);
 
     while (true) {
-        failed_packets = send_packet_collection(socket, num_timeouts, packets_filled, packet, failed_packet_seq);
+        failed_packets = send_packet_collection(socket, packets_filled, packet, failed_packet_seq);
         if (failed_packets == 0) {
             // All packets sent successfully
             break;
@@ -588,7 +597,7 @@ void handle_client_connection(int socket, char src_ip[], char dest_ip[]) {
     }
 
     // Wait for acknowledgment
-    if (handle_ack(socket, &packet) == ERROR) {
+    if (handle_ack(socket, packet) == ERROR) {
         fprintf(stderr, "Error occurred while handling acknowledgment.\n");
         for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
             free_packet(&packet[i]);
