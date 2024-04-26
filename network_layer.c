@@ -55,9 +55,10 @@ unsigned short checksum(void *b, int len) {
  * In the end, we will fill in our ip_header checksum for verification of the IP header at layer 3.
  */
 
-void fill_ip_header(struct iphdr *ip_header, char *src_ip, char *dst_ip) {
+uint16_t fill_ip_header(struct iphdr *ip_header, char *src_ip, char *dst_ip) {
     ip_header->ihl = 5; // Header length (in 32-bit words)
     ip_header->version = 4; // IPv4
+    ip_header->check = 0; //set checksum to 0 first
     ip_header->tos = 0; // Type of service
     ip_header->tot_len = htons(PACKET_SIZE); // Total length of the packet
     ip_header->id = htons(12345); // Identification
@@ -68,7 +69,14 @@ void fill_ip_header(struct iphdr *ip_header, char *src_ip, char *dst_ip) {
     ip_header->saddr = inet_addr(src_ip); // Source IP address
     ip_header->daddr = inet_addr(dst_ip); // Destination IP address
 
+    if(ip_header->saddr == INADDR_ANY|| ip_header->daddr == INADDR_ANY ){
+        perror("inet_addr");
+        return ERROR;
+    }
+
     ip_header->check = checksum(ip_header, sizeof(struct iphdr));
+
+    return SUCCESS;
 
 
 }
@@ -91,6 +99,21 @@ uint16_t get_ip_header_wire_ready(struct iphdr (*ip_header)){
      * Notice we skipped over s and d addr this is because inet_addr() already did this bit flip for us!
      * So we do not need to do anything here. We can leave those ones.
      */
+
+}
+
+/*
+ * Here is the opposite, for when we want to read it. We may need to we may not need to.
+ */
+uint16_t get_ip_header_host_ready(struct iphdr (*ip_header)){
+
+    ip_header->ihl = ntohl(ip_header->ihl);
+    ip_header->version = ntohl(ip_header->version); // IPv4
+    ip_header->tos = 0; // Type of service
+    ip_header->tot_len = ntohl(PACKET_SIZE); // Total length of the packet
+    ip_header->id = ntohs(12345); // Identification
+    ip_header->ttl = 64; // Time to live
+    ip_header->check = ntohs(ip_header->check);
 
 
 
