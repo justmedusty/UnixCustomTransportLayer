@@ -60,7 +60,7 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
 
 uint16_t calculate_checksum(char *data[], size_t length);
 
-void handle_client_connection(int socket);
+void handle_client_connection(int socket, char src_ip[], char dest_ip[]);
 
 uint16_t send_resend(int socket, uint16_t sequence);
 
@@ -70,7 +70,7 @@ uint16_t handle_close(int socket);
 
 uint16_t handle_corruption(int socket, struct Header *head);
 
-uint16_t set_packet_timeout(int custom_timer, int num_timeouts);
+uint16_t set_packet_timeout(uint16_t num_timeouts, uint16_t i);
 
 void reset_timeout();
 
@@ -82,7 +82,9 @@ void get_transport_packet_wire_ready(struct iovec iov[3]);
 
 uint16_t send_oob_data(int socket, char oob_char);
 
-uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[]);
+uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[],
+                                int failed_packet_seq[PACKET_SIZE]);
 
+void sigalrm_handler(uint16_t *num_timeouts, Packet packet[MAX_PACKET_COLLECTION]);
 
 #endif //UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H

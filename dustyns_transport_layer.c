@@ -26,10 +26,11 @@
  */
 
 Packet *allocate_packet() {
-    Packet *packet = (Packet *) malloc(sizeof(Packet));
+    Packet *packet = malloc(sizeof(struct Packet));
 
     if (packet == NULL) {
         perror("malloc");
+        free(packet);
         return NULL;
     }
     packet->iov[0].iov_base = malloc(sizeof(struct iphdr));
@@ -39,11 +40,10 @@ Packet *allocate_packet() {
     packet->iov[2].iov_base = malloc(PAYLOAD_SIZE);
     packet->iov[2].iov_len = PAYLOAD_SIZE;
 
-    if (packet->iov[0].iov_base == NULL || packet->iov[1].iov_base == NULL) {
+
+    if (packet->iov[0].iov_base == NULL || packet->iov[1].iov_base == NULL || packet->iov[2].iov_base == NULL) {
         perror("malloc");
-        free(packet->iov[0].iov_base);
-        free(packet->iov[1].iov_base);
-        free(packet);
+        free_packet(packet);
         return NULL;
     }
 
@@ -88,10 +88,10 @@ uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array
 
     //Check they are not passing a packet array larger than the max
     if (packet_array_len > MAX_PACKET_COLLECTION) {
-        return -ERROR;
+        return ERROR;
     }
     //Init to error code so we know something went wrong if it returns with this value
-    uint16_t packets_filled = -ERROR;
+    uint16_t packets_filled = ERROR;
 
     //Getting the length of the buffer we are going to packet-ize
     size_t source_length = strlen(data_buff);
@@ -120,19 +120,19 @@ uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array
 
         memcpy(packet_buff, data_buff + (source_length - remaining_bytes), bytes_to_copy);
 
-        memcpy(packet[i].iov[1].iov_base, packet_buff, bytes_to_copy);
+        memcpy(packet[i].iov[2].iov_base, packet_buff, bytes_to_copy);
 
         remaining_bytes -= bytes_to_copy;
 
         Header header = {
                 DATA,
-                calculate_checksum(packet[i].iov[1].iov_base, bytes_to_copy),
+                calculate_checksum(packet[i].iov[2].iov_base, bytes_to_copy),
                 i,
                 sizeof bytes_to_copy
         };
 
 
-        packet[i].iov[0].iov_base = &header;
+        packet[i].iov[1].iov_base = &header;
 
 
         packets_filled = i;
@@ -158,32 +158,29 @@ uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array
  * aggressive and allowing time for any network issues to pass
  * This can relieve issues such as bogging the network / congestion.
  */
-uint16_t set_packet_timeout(int custom_timer, int num_timeouts) {
+uint16_t set_packet_timeout(uint16_t num_timeouts, uint16_t i) {
 
-    if (custom_timer != NULL && custom_timer > 0 && custom_timer < MAX_TIMEOUT) {
-        alarm(custom_timer);
-        return custom_timer;
+
+    if (num_timeouts == 0) {
+        alarm(INITIAL_TIMEOUT);
+        return INITIAL_TIMEOUT;
     } else {
-        if (num_timeouts == 0) {
-            alarm(INITIAL_TIMEOUT);
-            return INITIAL_TIMEOUT;
-        } else {
-            uint16_t timeout_value = (INITIAL_TIMEOUT);
+        uint16_t timeout_value = (INITIAL_TIMEOUT);
 
-            for (int i = 0; i < num_timeouts; ++i) {
-                timeout_value *= 2;
-            }
-
-            if (timeout_value < MAX_TIMEOUT) {
-                alarm(timeout_value);
-                return timeout_value;
-            } else {
-                return -ERROR;
-            }
-
+        for (int i = 0; i < num_timeouts; ++i) {
+            timeout_value *= 2;
         }
+
+        if (timeout_value < MAX_TIMEOUT) {
+            alarm(timeout_value);
+            return timeout_value;
+        } else {
+            return -ERROR;
+        }
+
     }
 }
+
 
 /*
  * This function simply resets the alarm once we have received an ACK on the series of packets we just sent.
@@ -193,18 +190,17 @@ void reset_timeout() {
     alarm(0);
 }
 
-uint16_t sigalrm_handler(uint16_t num_timeouts, Packet packet[MAX_PACKET_COLLECTION]) {
+void sigalrm_handler(uint16_t *num_timeouts, Packet packet[MAX_PACKET_COLLECTION]) {
 
     uint16_t timeout = INITIAL_TIMEOUT;
-    for (int i = 0; i < num_timeouts; i++) {
+    for (int i = 0; i < *num_timeouts; i++) {
         timeout *= 2;
     }
     if (timeout > MAX_TIMEOUT) {
-
-        return -ERROR;
-
+        fprintf(stderr, "Max timeout reached\n");
+        exit(EXIT_FAILURE);
     } else {
-        return timeout;
+        set_packet_timeout(0, *num_timeouts);
     }
 
 
@@ -260,7 +256,7 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
  * Also sending out RESEND messages to the other side with the packet sequence number that will need to be sent back.
  */
 
-uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]) {
+uint16_t handle_ack(int socket, Packet *packets[]) {
     bool sequence_received[MAX_PACKET_COLLECTION + 1] = {false}; // Initialize all to false
     int last_received = -1;
     int missing_packets = 0;
@@ -496,11 +492,13 @@ void get_transport_packet_host_ready(struct iovec iov[3]) {
  *
  * Remember, we are using exponential backoff. Every timeout with the same packet set, we double the timeout length.
  */
-uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[]) {
 
+
+uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_packets, Packet packets[],
+                                int failed_packet_seq[PACKET_SIZE]) {
+
+    memset(failed_packet_seq, 0, PACKET_SIZE);
     int failed_packets = 0;
-    int failed_packet_seq[MAX_PACKET_COLLECTION];
-
     for (int i = 0; i < num_packets; i++) {
         struct msghdr msg_hdr;
         memset(&msg_hdr, 0, sizeof(msg_hdr));
@@ -512,6 +510,8 @@ uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_
             failed_packets++;
             /*
              * We want to be able to go through after and resend.
+             * This will take the array in memory that was passed
+             * by reference and put the seq # of failed packets in there
              */
             failed_packet_seq[failed_packets - 1] = i;
         }
@@ -535,21 +535,81 @@ uint16_t send_packet_collection(int socket, uint16_t num_timeouts, uint16_t num_
  *
  *
  */
-
-void handle_client_connection(int socket) {
+void handle_client_connection(int socket, char src_ip[], char dest_ip[]) {
     char msg_buffer[PAYLOAD_SIZE];
-    char hdr_buffer[HEADER_SIZE];
-    struct msghdr;
-    struct iovec iov[2];
-    uint16_t checksum;
-    const char welcome_msg[] = "Welcome to the raw socket server, we are building our own transport layer on top of the IP/network layer of the OSI !";
-    checksum = (&welcome_msg, strlen(welcome_msg));
-    uint16_t header = htons(checksum);
-    iov[0].iov_base = &header;
-    iov[0].iov_len = HEADER_SIZE;
+    Packet packet[MAX_PACKET_COLLECTION];
+    Packet received_packets[MAX_PACKET_COLLECTION];
 
-    iov[1].iov_base = (char *) &welcome_msg;
-    iov[1].iov_len = PAYLOAD_SIZE;
+    for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
+        packet[i] = *allocate_packet();
+        received_packets[i] = *allocate_packet();
+    }
+    int failed_packet_seq[PACKET_SIZE];
 
 
+    const char welcome_msg[] = "Welcome to the raw socket server, we are building our own transport layer on top of the IP/network layer of the OSI!";
+    uint16_t packets_filled = packetize_data(packet, (char *) welcome_msg, 1, src_ip, dest_ip);
+    if (packets_filled == ERROR) {
+        fprintf(stderr, "Error occurred while packetizing data.\n");
+        for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
+            free_packet(&packet[i]);
+            free_packet(&received_packets[i]);
+        }
+        return;
+    }
+
+    int num_timeouts = 0;
+    uint16_t failed_packets = 0;
+    signal(SIGALRM, sigalrm_handler(num_timeouts, packet));
+
+    while (true) {
+        failed_packets = send_packet_collection(socket, num_timeouts, packets_filled, packet, failed_packet_seq);
+        if (failed_packets == 0) {
+            // All packets sent successfully
+            break;
+        } else if (failed_packets == ERROR) {
+            fprintf(stderr, "Error occurred while sending packets.\n");
+            for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
+                free_packet(&packet[i]);
+                free_packet(&received_packets[i]);
+            }
+            return;
+        } else {
+            num_timeouts++;
+            if (num_timeouts > 3) {
+                fprintf(stderr, "Maximum number of timeouts reached. Exiting.\n");
+                for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
+                    free_packet(&packet[i]);
+                    free_packet(&received_packets[i]);
+                }
+                return;
+            }
+        }
+    }
+
+    // Wait for acknowledgment
+    if (handle_ack(socket, &packet) == ERROR) {
+        fprintf(stderr, "Error occurred while handling acknowledgment.\n");
+        for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
+            free_packet(&packet[i]);
+            free_packet(&received_packets[i]);
+        }
+        return;
+    }
+
+    // Close the connection
+    if (handle_close(socket) == ERROR) {
+        fprintf(stderr, "Error occurred while handling connection close.\n");
+        for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
+            free_packet(&packet[i]);
+            free_packet(&received_packets[i]);
+        }
+        return;
+    }
+
+
+    for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
+        free_packet(&packet[i]);
+        free_packet(&received_packets[i]);
+    }
 }
