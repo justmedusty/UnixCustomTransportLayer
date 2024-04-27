@@ -669,10 +669,11 @@ uint16_t receive_packets(Packet *receiving_packet_list,int socket,int *packets_t
  *
  *
  */
-void handle_client_connection(int socket, char src_ip[], char dest_ip[]) {
+void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
 
     Packet packet[MAX_PACKET_COLLECTION];
     Packet received_packets[MAX_PACKET_COLLECTION];
+
 
     for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
         uint16_t result;

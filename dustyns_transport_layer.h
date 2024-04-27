@@ -54,7 +54,7 @@ typedef struct Header {
 
 uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip);
 
-        uint16_t allocate_packet(Packet *packet);
+uint16_t allocate_packet(Packet *packet);
 
 uint16_t free_packet(Packet *packet);
 
@@ -62,31 +62,32 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
 
 uint16_t calculate_checksum(char *data[], size_t length);
 
-void handle_client_connection(int socket, char src_ip[], char dest_ip[]);
+void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip);
 
 uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t dst_ip);
 
-uint16_t send_ack(int socket, uint16_t max_sequence,uint32_t src,uint32_t dest);
+uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest);
 
-uint16_t handle_close(int socket,uint32_t src_ip, uint32_t dst_ip);
+uint16_t handle_close(int socket, uint32_t src_ip, uint32_t dst_ip);
 
-uint16_t handle_corruption(int socket,uint32_t src_ip, uint32_t dst_ip, uint16_t sequence);
+uint16_t handle_corruption(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_t sequence);
 
 uint16_t set_packet_timeout();
 
 void reset_timeout();
 
-uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip,uint32_t dest_ip);
+uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip, uint32_t dest_ip);
+
 void get_transport_packet_host_ready(struct iovec iov[3]);
 
 void get_transport_packet_wire_ready(struct iovec iov[3]);
 
-uint16_t send_oob_data(int socket, char oob_char,uint32_t src_ip, uint32_t dst_ip);
+uint16_t send_oob_data(int socket, char oob_char, uint32_t src_ip, uint32_t dst_ip);
 
 
 uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets[], int failed_packet_seq[PACKET_SIZE]);
 
-uint16_t missing_packets(int socket, uint16_t sequence,uint32_t src_ip, uint32_t dst_ip);
+uint16_t missing_packets(int socket, uint16_t sequence, uint32_t src_ip, uint32_t dst_ip);
 
 void sigalrm_handler();
 
