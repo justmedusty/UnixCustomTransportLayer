@@ -92,8 +92,9 @@ uint16_t free_packet(Packet *packet) {
  * pre-allocated, initialized packet array and fill an array with packet data. We will break everything
  * down into packets of PAYLOAD_SIZE to a maximum number of packets MAX_PACKET_COLLECTION, sequence them properly,
  * include proper message size, provide a checksum for the data, fill in the layer 3 header.
+ *
  */
-uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, char *src_ip, char *dest_ip) {
+uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip,uint32_t dest_ip) {
 
     //Check they are not passing a packet array larger than the max
     if (packet_array_len > MAX_PACKET_COLLECTION) {
@@ -270,7 +271,7 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
  * Also sending out RESEND messages to the other side with the packet sequence number that will need to be sent back.
  */
 
-uint16_t handle_ack(int socket, Packet *packets, char *src_ip) {
+uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip) {
     bool sequence_received[MAX_PACKET_COLLECTION + 1] = {false}; // Initialize all to false
     int last_received = -1;
     int missing_packets = 0;
@@ -284,8 +285,10 @@ uint16_t handle_ack(int socket, Packet *packets, char *src_ip) {
 
         struct iphdr ip_hdr = *(struct iphdr * ) packet->iov[0].iov_base;
 
-        if(!strcmp(ntohl(ip_hdr.saddr), src_ip)){
-
+        if(ip_hdr.saddr == src_ip){
+            /*
+             * We'll do ip checking here
+             */
         }
 
         Header *header = (Header *) packet->iov[1].iov_base;
@@ -325,7 +328,7 @@ uint16_t handle_ack(int socket, Packet *packets, char *src_ip) {
  * This function is for when a set of packets has been checked properly and an acknowledge can be sent.
  * Send the acknowledge message to the client side., return SUCCESS or ERROR depending on return value of sendmsg() call
  */
-uint16_t send_ack(int socket, uint16_t max_sequence,uint32_t *src,uint32_t *dest) {
+uint16_t send_ack(int socket, uint16_t max_sequence,uint32_t src,uint32_t dest) {
 
     Packet packet;
 
@@ -363,7 +366,7 @@ uint16_t send_ack(int socket, uint16_t max_sequence,uint32_t *src,uint32_t *dest
  *  This function handles sending RESEND packets which will have no body just a header with the RESEND status, and the seq number of the missing packet
  *  Returns the seq number on success and ERROR otherwise.
  */
-uint16_t send_resend(int socket, uint16_t sequence, char *src,char *dest) {
+uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t dst_ip) {
 
     Packet packet;
 
@@ -372,11 +375,11 @@ uint16_t send_resend(int socket, uint16_t sequence, char *src,char *dest) {
     Header header = {
             RESEND,
             0,
-            ntohs(sequence),
+            sequence,
             0
     };
     struct iphdr ip_hdr;
-    fill_ip_header(&ip_hdr,src,dest);
+    fill_ip_header(&ip_hdr,src_ip,dst_ip);
     packet.iov[0].iov_base = &ip_hdr;
     packet.iov[1].iov_base = &header;
 
@@ -402,7 +405,7 @@ uint16_t send_resend(int socket, uint16_t sequence, char *src,char *dest) {
  * header, then the client will read the sequence and resend that packet
  */
 
-uint16_t handle_corruption(int socket, char *src,char *dest, uint16_t sequence) {
+uint16_t handle_corruption(int socket,uint32_t src_ip, uint32_t dst_ip, uint16_t sequence) {
 
     Packet packet;
 
@@ -417,7 +420,7 @@ uint16_t handle_corruption(int socket, char *src,char *dest, uint16_t sequence) 
             0
     };
 
-    fill_ip_header(&ip_hdr,src,dest);
+    fill_ip_header(&ip_hdr,src_ip,dst_ip);
 
     packet.iov[0].iov_base =  &ip_hdr;
     packet.iov[1].iov_base = &header;
@@ -439,22 +442,29 @@ uint16_t handle_corruption(int socket, char *src,char *dest, uint16_t sequence) 
 }
 
 
-uint16_t missing_packets(int socket, uint16_t sequence, char *src,char *dest) {
+uint16_t missing_packets(int socket, uint16_t sequence,uint32_t src_ip, uint32_t dst_ip) {
 
+    Packet packet;
+
+    allocate_packet(&packet);
+
+    struct iphdr ip_hdr;
     Header header = {
             CORRUPTION,
             0,
             sequence,
             0
     };
-    struct iovec iov;
-    iov.iov_base = &header;
-    iov.iov_len = sizeof header;
+    fill_ip_header(&ip_hdr,src_ip,dst_ip);
+
+    packet.iov[0].iov_base =  &ip_hdr;
+    packet.iov[1].iov_base = &header;
+
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = &iov;
-    message.msg_iovlen = 1;
+    message.msg_iov = packet.iov;
+    message.msg_iovlen = 2;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
     if (bytes_sent < 0) {
@@ -469,7 +479,7 @@ uint16_t missing_packets(int socket, uint16_t sequence, char *src,char *dest) {
  * allow 1 byte of OOB data to be send, could be some kind of escape or abort signal. OOB data is supposed to skip the queue
  * and come off the wire and be processed before anything else.
  */
-uint16_t send_oob_data(int socket, char oob_char,char *src,char *dest) {
+uint16_t send_oob_data(int socket, char oob_char,uint32_t src_ip, uint32_t dst_ip) {
 
     Packet packet;
     allocate_packet(&packet);
@@ -481,7 +491,7 @@ uint16_t send_oob_data(int socket, char oob_char,char *src,char *dest) {
             OUT_OF_BAND_DATA_SIZE,
     };
 
-    fill_ip_header(&ip_hdr,src,dest);
+    fill_ip_header(&ip_hdr,src_ip,dst_ip);
 
     packet.iov[0].iov_base = &ip_hdr;
     packet.iov[1].iov_base = &header;
@@ -508,7 +518,7 @@ uint16_t send_oob_data(int socket, char oob_char,char *src,char *dest) {
  * This will be used to let the other side of the association know that the connection
  * is being closed so it can close the connection and clean up.
  */
-uint16_t handle_close(int socket,char *src,char *dest) {
+uint16_t handle_close(int socket,uint32_t src_ip, uint32_t dst_ip) {
 
     Packet packet;
     allocate_packet(&packet);
@@ -522,15 +532,15 @@ uint16_t handle_close(int socket,char *src,char *dest) {
     };
 
 
-    fill_ip_header(&ip_hdr,src,dest);
+    fill_ip_header(&ip_hdr,src_ip,dst_ip);
 
     packet.iov[0].iov_base = &ip_hdr;
     packet.iov[1].iov_base = &header;
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = &iov;
-    message.msg_iovlen = 1;
+    message.msg_iov = packet.iov;
+    message.msg_iovlen = 2;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
     if (bytes_sent < 0) {
@@ -579,11 +589,13 @@ void get_transport_packet_host_ready(struct iovec iov[3]) {
  * On send we will start a timer based on the current number of timeouts.
  *
  * Remember, we are using exponential backoff. Every timeout with the same packet set, we double the timeout length.
+ *
+ * Once this is done it will fill your failed pack seq array with the seq numbers of the packets that didn't send and you can decide what to do from
+ * there.
  */
 
 
-uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets[],
-                                int failed_packet_seq[PACKET_SIZE]) {
+uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets[],int failed_packet_seq[PACKET_SIZE]) {
 
     memset(failed_packet_seq, 0, PACKET_SIZE);
     int failed_packets = 0;
@@ -620,13 +632,21 @@ uint16_t receive_packets(Packet *receiving_packet_list,int socket,int *packets_t
     struct iphdr ip_hdr;
     Header *head;
     while(recvmsg(socket,&msg,0) != 0){
+
         receiving_packet_list[i] = *(Packet *) &msg;
+
         head = receiving_packet_list[i].iov[1].iov_base;
 
         if(head->status == DATA){
             switch (head->status) {
 
-                case OOB: return
+                case OOB: return head->sequence;
+
+                case CLOSE: return CLOSE;
+
+                case CORRUPTION : return head->sequence;
+
+                case RESEND :
 
             }
         }
