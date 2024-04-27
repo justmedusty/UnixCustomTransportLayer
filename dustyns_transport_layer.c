@@ -271,7 +271,7 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
  * Also sending out RESEND messages to the other side with the packet sequence number that will need to be sent back.
  */
 
-uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip) {
+uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip,uint32_t dest_ip) {
     bool sequence_received[MAX_PACKET_COLLECTION + 1] = {false}; // Initialize all to false
     int last_received = -1;
     int missing_packets = 0;
@@ -285,10 +285,8 @@ uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip) {
 
         struct iphdr ip_hdr = *(struct iphdr * ) packet->iov[0].iov_base;
 
-        if(ip_hdr.saddr == src_ip){
-            /*
-             * We'll do ip checking here
-             */
+        if(ip_hdr.saddr != src_ip){
+            continue;
         }
 
         Header *header = (Header *) packet->iov[1].iov_base;
@@ -304,7 +302,7 @@ uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip) {
     for (int i = 0; i <= last_received; ++i) {
         if (!sequence_received[i]) {
             // Packet with sequence i is missing, send RESEND
-            send_resend(socket, i);
+            send_resend(socket, i,src_ip,dest_ip);
             missing_packets += 1;
         }
     }
@@ -314,7 +312,7 @@ uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip) {
 
     } else {
 
-        if (send_ack(socket, highest_packet_received) != SUCCESS) {
+        if (send_ack(socket, highest_packet_received,src_ip,dest_ip) != SUCCESS) {
             return ERROR;
         }
 
@@ -442,7 +440,7 @@ uint16_t handle_corruption(int socket,uint32_t src_ip, uint32_t dst_ip, uint16_t
 }
 
 
-uint16_t missing_packets(int socket, uint16_t sequence,uint32_t src_ip, uint32_t dst_ip) {
+uint16_t send_missing_packets_notice(int socket, uint16_t sequence,uint32_t src_ip, uint32_t dst_ip) {
 
     Packet packet;
 
@@ -450,7 +448,7 @@ uint16_t missing_packets(int socket, uint16_t sequence,uint32_t src_ip, uint32_t
 
     struct iphdr ip_hdr;
     Header header = {
-            CORRUPTION,
+            NOT_RECEIVED,
             0,
             sequence,
             0
@@ -622,29 +620,45 @@ uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets
 
 }
 
-uint16_t receive_packets(Packet *receiving_packet_list,int socket,int *packets_to_resend){
+uint16_t receive_data_packets(Packet *receiving_packet_list,int socket,int *packets_to_resend,uint32_t src_ip, uint32_t dst_ip){
 
     memset(packets_to_resend,0,MAX_PACKET_COLLECTION);
 
     int i = 0;
     memset(receiving_packet_list,0,MAX_PACKET_COLLECTION);
     struct msghdr msg;
-    struct iphdr ip_hdr;
+    struct iphdr *ip_hdr;
     Header *head;
+    uint16_t return_value;
     while(recvmsg(socket,&msg,0) != 0){
 
         receiving_packet_list[i] = *(Packet *) &msg;
 
+        ip_hdr = receiving_packet_list[i].iov[0].iov_base;
         head = receiving_packet_list[i].iov[1].iov_base;
 
-        if(head->status == DATA){
+        if(head->msg_size > 0){
+
+        }
+
+        if(head->packet_end == head->sequence && (return_value =handle_ack(socket,receiving_packet_list,src_ip,dst_ip)) == SUCCESS){
+            return SUCCESS;
+        } else{
+            if(return_value == ERROR){
+                return ERROR;
+            } else return return_value;
+        }
+
+
+        if(head->status != DATA){
             switch (head->status) {
 
-                case OOB: return head->sequence;
+                case OOB: return p;
 
                 case CLOSE: return CLOSE;
 
-                case CORRUPTION : return head->sequence;
+                case CORRUPTION :
+                    handle_corruption(socket,src_ip,dst_ip,i);
 
                 case RESEND :
 
@@ -659,7 +673,7 @@ uint16_t receive_packets(Packet *receiving_packet_list,int socket,int *packets_t
 /*
  * This is our conn handler function; since we are using raw sockets, there is no transport layer. WE are the transport layer. We will do
  * some basic headers to get some metadata about the incoming messages. There will be no retransmission automatically this is all done by the
- * transport layer. We can implement our own logic to resend messages after a specific timeout time, however for this we will keep it simple.
+ * transport layer. We can implement our own logic to resend messages after a specific timeout time, however, for this we will keep it simple.
  * We will just tack some basic metadata like message size / message length. We could even do some kind of checksum. We can implement a basic
  * checksum with a simple bitwise XOR operation.
  *
@@ -732,7 +746,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
     }
 
     // Wait for acknowledgment
-    if (handle_ack(socket, packet) == ERROR) {
+    if (handle_ack(socket, packet,src_ip,dest_ip) == ERROR) {
         fprintf(stderr, "Error occurred while handling acknowledgment.\n");
         for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
             free_packet(&packet[i]);
@@ -742,7 +756,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
     }
 
     // Close the connection
-    if (handle_close(socket) == ERROR) {
+    if (handle_close(socket,src_ip,dest_ip) == ERROR) {
         fprintf(stderr, "Error occurred while handling connection close.\n");
 
         for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
@@ -759,5 +773,6 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
     }
 
     exit(EXIT_SUCCESS);
+
 
 }

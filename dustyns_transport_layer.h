@@ -30,7 +30,7 @@
 #define RESEND 4
 #define CLOSE 5
 #define OOB 6
-#define END 7
+#define NOT_RECEIVED 7
 #define INITIAL_TIMEOUT 10
 #define MAX_TIMEOUT 160
 
@@ -48,11 +48,14 @@ typedef struct Header {
     uint16_t checksum;
     uint16_t sequence;
     uint16_t msg_size;
+    /*
+     * This will mark the last packet in the stream, it will let us know when to stop processing this set of packets.
+     */
+    uint16_t packet_end;
 
 } Header;
 
-
-uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip);
+uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip,uint32_t dest_ip);
 
 uint16_t allocate_packet(Packet *packet);
 
