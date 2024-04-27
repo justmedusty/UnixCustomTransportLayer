@@ -454,9 +454,9 @@ uint16_t send_missing_packets(int socket, uint16_t *sequence[],uint16_t num_pack
     for(int i = 0;i < num_packets;i++) {
 
         Header header;
-        header = *(struct Header *) packet_collection[*sequence[i]].iov[1].iov_base;
+        header = *((Header *)packet_collection[*sequence[i]].iov[1].iov_base);
         header.status = SECOND_SEND;
-        packet_collection[*sequence[i]].iov[1] = header;
+        packet_collection[*sequence[i]].iov[1].iov_base = &header;
         struct msghdr message;
         memset(&message, 0, sizeof(message));
         message.msg_iov = packet_collection[*sequence[i]].iov;
@@ -631,6 +631,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list,int socket,int *pack
     struct iphdr *ip_hdr;
     Header *head;
     uint16_t return_value;
+
     while(recvmsg(socket,&msg,0) != 0){
 
         receiving_packet_list[i] = *(Packet *) &msg;
@@ -659,7 +660,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list,int socket,int *pack
                 case CLOSE: return CLOSE;
 
                 case CORRUPTION :
-                    handle_corruption(socket,src_ip,dst_ip,i);
+
 
                 case RESEND :
 
