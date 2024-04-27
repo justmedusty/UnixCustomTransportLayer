@@ -24,12 +24,12 @@
 #define PACKET_SIZE ((sizeof (struct iphdr) + HEADER_SIZE + PAYLOAD_SIZE))
 #define MAX_PACKET_COLLECTION 1000
 #define OUT_OF_BAND_DATA_SIZE 1
-#define DATA "DATA"
-#define ACKNOWLEDGE "ACK"
-#define CORRUPTION "BAD_DATA"
-#define RESEND "RESEND"
-#define CLOSE "DISCONNECT"
-#define OOB "OUT_OF_BAND"
+#define DATA 1
+#define ACKNOWLEDGE 2
+#define CORRUPTION 3
+#define RESEND 4
+#define CLOSE 5
+#define OOB 6
 #define INITIAL_TIMEOUT 10
 #define MAX_TIMEOUT 160
 
@@ -43,14 +43,14 @@ typedef struct Packet {
 
 
 typedef struct Header {
-    char status[20];
+    uint16_t status;
     uint16_t checksum;
     uint16_t sequence;
     uint16_t msg_size;
 
 } Header;
 
-uint16_t handle_ack(int socket, Packet *packets[MAX_PACKET_COLLECTION]);
+uint16_t handle_ack(int socket, Packet *packets);
 
 uint16_t allocate_packet(Packet *packet);
 
@@ -62,15 +62,15 @@ uint16_t calculate_checksum(char *data[], size_t length);
 
 void handle_client_connection(int socket, char src_ip[], char dest_ip[]);
 
-uint16_t send_resend(int socket, uint16_t sequence);
+uint16_t send_resend(int socket, uint16_t sequence, char *src,char *dest);
 
 uint16_t send_ack(int socket, uint16_t sequence);
 
 uint16_t handle_close(int socket);
 
-uint16_t handle_corruption(int socket, struct Header *head);
+uint16_t handle_corruption(int socket, char *src,char *dest, Header *head);
 
-uint16_t set_packet_timeout(uint16_t num_timeouts, uint16_t i);
+uint16_t set_packet_timeout();
 
 void reset_timeout();
 
