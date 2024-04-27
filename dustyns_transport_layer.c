@@ -438,38 +438,39 @@ uint16_t handle_corruption(int socket,uint32_t src_ip, uint32_t dst_ip, uint16_t
         return header.sequence;
     }
 }
+/*
+ * This function is for resending packets that were either never delivered or corrupted along the way.
+ * We will just go through the array of bad seq numbers and we will resend the specified packets.
+ *
+ *
+ * We will need to store the sequence of missing packets inside an array as we receive them
+ * if one cannot be sent return the first seq num of the packet that cannot be
+ * sent.
+ */
+
+uint16_t send_missing_packets(int socket, uint16_t *sequence[],uint16_t num_packets,Packet *packet_collection) {
 
 
-uint16_t send_missing_packets_notice(int socket, uint16_t sequence,uint32_t src_ip, uint32_t dst_ip) {
+    for(int i = 0;i < num_packets;i++) {
 
-    Packet packet;
+        Header header;
+        header = *(struct Header *) packet_collection[*sequence[i]].iov[1].iov_base;
+        header.status = SECOND_SEND;
+        packet_collection[*sequence[i]].iov[1] = header;
+        struct msghdr message;
+        memset(&message, 0, sizeof(message));
+        message.msg_iov = packet_collection[*sequence[i]].iov;
+        message.msg_iovlen = 3;
 
-    allocate_packet(&packet);
+        ssize_t bytes_sent = sendmsg(socket, &message, 0);
 
-    struct iphdr ip_hdr;
-    Header header = {
-            NOT_RECEIVED,
-            0,
-            sequence,
-            0
-    };
-    fill_ip_header(&ip_hdr,src_ip,dst_ip);
-
-    packet.iov[0].iov_base =  &ip_hdr;
-    packet.iov[1].iov_base = &header;
-
-
-    struct msghdr message;
-    memset(&message, 0, sizeof(message));
-    message.msg_iov = packet.iov;
-    message.msg_iovlen = 2;
-
-    ssize_t bytes_sent = sendmsg(socket, &message, 0);
-    if (bytes_sent < 0) {
-        return ERROR;
-    } else {
-        return header.sequence;
+        if (bytes_sent < 0) {
+            return *sequence[i];
+        } else {
+            continue;
+        }
     }
+    return SUCCESS;
 }
 
 /*

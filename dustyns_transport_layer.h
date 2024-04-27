@@ -30,12 +30,16 @@
 #define RESEND 4
 #define CLOSE 5
 #define OOB 6
-#define NOT_RECEIVED 7
+#define SECOND_SEND 7
 #define INITIAL_TIMEOUT 10
 #define MAX_TIMEOUT 160
 
 #define SUCCESS 0
-#define ERROR 1
+
+//This because they're all unsigned 16 bits,
+// so this makes more sense than using 1 since if 1 packet was missing, for example, it would also return 1.
+// 65536 would never come up so this makes more sense as the error code.
+#define ERROR 65535
 
 
 typedef struct Packet {
