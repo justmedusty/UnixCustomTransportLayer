@@ -76,6 +76,8 @@ uint16_t fill_ip_header(struct iphdr *ip_header, char *src_ip, char *dst_ip) {
 
     ip_header->check = checksum(ip_header, sizeof(struct iphdr));
 
+    get_ip_header_wire_ready(ip_header);
+
     return SUCCESS;
 
 
