@@ -33,7 +33,7 @@ int get_listener() {
     hints.ai_protocol = IPPROTO_RAW;
     int return_value;
 
-    if ((return_value = getaddrinfo(NULL, PORT, &hints, &server)) < 0) {
+    if ((return_value = getaddrinfo(NULL, NULL, &hints, &server)) < 0) {
         gai_strerror(return_value);
         exit(EXIT_FAILURE);
     }
