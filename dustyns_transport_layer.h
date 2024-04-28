@@ -14,6 +14,8 @@
 #include "errno.h"
 #include "string.h"
 #include "netinet/ip.h"
+#include <signal.h>
+
 
 #ifndef UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H
 #define UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H

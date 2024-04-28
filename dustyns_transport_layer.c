@@ -26,6 +26,7 @@
  */
 
 uint16_t num_timeouts;
+char oob_data;
 
 uint16_t allocate_packet(Packet *packet) {
     packet = malloc(sizeof(Packet));
@@ -621,6 +622,13 @@ uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets
 
 }
 
+/*
+ * This function will be a packet receiver. I may run this in a separate thread or process but I am not sure yet.
+ *It will fill the list of packets passed to it and will also handle the different types of header status' that may come up.
+ * Example, should it find an ACK, the timer will be reset, should it find a corruption or a resend, it will add that packet sequence to the passed list.
+ * Should it find a close, it will close the socket and return etc.
+ */
+
 uint16_t receive_data_packets(Packet *receiving_packet_list,int socket,int *packets_to_resend,uint32_t src_ip, uint32_t dst_ip){
 
     memset(packets_to_resend,0,MAX_PACKET_COLLECTION);
@@ -630,45 +638,75 @@ uint16_t receive_data_packets(Packet *receiving_packet_list,int socket,int *pack
     struct msghdr msg;
     struct iphdr *ip_hdr;
     Header *head;
-    uint16_t return_value;
+    uint16_t return_value = ERROR;
+    int bad_packets;
+
 
     while(recvmsg(socket,&msg,0) != 0){
 
-        receiving_packet_list[i] = *(Packet *) &msg;
 
         ip_hdr = receiving_packet_list[i].iov[0].iov_base;
         head = receiving_packet_list[i].iov[1].iov_base;
-
-        if(head->msg_size > 0){
-
-        }
+        char data[head->msg_size];
 
         if(head->packet_end == head->sequence && (return_value =handle_ack(socket,receiving_packet_list,src_ip,dst_ip)) == SUCCESS){
+            receiving_packet_list[i] = *(Packet *) &msg;
             return SUCCESS;
         } else{
             if(return_value == ERROR){
                 return ERROR;
-            } else return return_value;
         }
 
 
         if(head->status != DATA){
             switch (head->status) {
+                /*
+                 * We'll send an interrupt signal when OOB data is discovered
+                 */
+                case OOB:
+                    oob_data = data[0];
+                    raise(SIGINT);
 
-                case OOB: return p;
-
-                case CLOSE: return CLOSE;
+                case CLOSE:
+                    close(socket);
+                    reset_timeout();
+                    return CLOSE;
 
                 case CORRUPTION :
-
+                    packets_to_resend[bad_packets] = i;
+                    bad_packets++;
 
                 case RESEND :
+                    packets_to_resend[bad_packets] = i;
+                    bad_packets++;
+
+                case ACKNOWLEDGE:
+                    reset_timeout();
+
+                case SECOND_SEND:
+                    receiving_packet_list[head->sequence].iov[2].iov_base = data;
+
+
+
+
 
             }
         }
     }
 
 
+
+}
+
+/*
+ * When OOB data is handled, we want to send an interrupt which will then immediately go to this handler and start processing the OOB data.
+ * I'll just keep this one check for now I will decide what I want to do with this later.
+ */
+void sig_int_handler(){
+
+    if (oob_data == 'd'){
+        exit(EXIT_SUCCESS);
+    }
 
 }
 
