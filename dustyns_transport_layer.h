@@ -61,7 +61,7 @@ typedef struct Header {
 
 } Header;
 
-uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip,uint32_t dest_ip);
+uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip, uint32_t dest_ip);
 
 uint16_t allocate_packet(Packet *packet);
 
@@ -93,6 +93,7 @@ void get_transport_packet_wire_ready(struct iovec iov[3]);
 
 uint16_t send_oob_data(int socket, char oob_char, uint32_t src_ip, uint32_t dst_ip);
 
+uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, int *packets_to_resend, uint32_t src_ip,uint32_t dst_ip);
 
 uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets[], int failed_packet_seq[PACKET_SIZE]);
 
