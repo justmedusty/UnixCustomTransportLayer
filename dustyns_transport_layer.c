@@ -219,8 +219,6 @@ void sigalrm_handler() {
     } else {
         set_packet_timeout();
     }
-
-
 }
 
 
@@ -255,7 +253,7 @@ uint16_t calculate_checksum(char *data[], size_t length) {
 
 /*
  * Here will be a function for verifying the checksum when we receive one in a client header message
- * It will return either 0 or -1, checksum good, or checksum not good.
+ * It will return either 0 or 65535, checksum good, or checksum not good.
  */
 
 uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum) {
@@ -340,7 +338,8 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
             ACKNOWLEDGE,
             0,
             max_sequence,
-            0
+            0,
+            ERROR
     };
 
     fill_ip_header(&ip_hdr, src, dest);
@@ -376,7 +375,8 @@ uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t ds
             RESEND,
             0,
             sequence,
-            0
+            0,
+            ERROR
     };
     struct iphdr ip_hdr;
     fill_ip_header(&ip_hdr, src_ip, dst_ip);
@@ -417,7 +417,8 @@ uint16_t handle_corruption(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_
             CORRUPTION,
             0,
             sequence,
-            0
+            0,
+            ERROR
     };
 
     fill_ip_header(&ip_hdr, src_ip, dst_ip);
@@ -490,6 +491,7 @@ uint16_t send_oob_data(int socket, char oob_char, uint32_t src_ip, uint32_t dst_
             0,
             0,
             OUT_OF_BAND_DATA_SIZE,
+            ERROR
     };
 
     fill_ip_header(&ip_hdr, src_ip, dst_ip);
@@ -529,7 +531,8 @@ uint16_t handle_close(int socket, uint32_t src_ip, uint32_t dst_ip) {
             CLOSE,
             0,
             0,
-            0
+            0,
+            ERROR
     };
 
 
@@ -557,6 +560,8 @@ uint16_t handle_close(int socket, uint32_t src_ip, uint32_t dst_ip) {
  * The network byte order is big endian, so this is standard practice.
  *
  * I may not even use these but I'll keep around until I come to a final decision.
+ *
+ * (probably gonna toss these)
  */
 
 void get_transport_packet_wire_ready(struct iovec iov[3]) {
@@ -640,8 +645,7 @@ send_packet_collection(int socket, uint16_t num_packets, Packet packets[], int f
  *
  */
 
-uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, int *packets_to_resend, uint32_t src_ip,
-                              uint32_t dst_ip) {
+uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, int *packets_to_resend, uint32_t src_ip,uint32_t dst_ip) {
 
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
 
@@ -670,54 +674,66 @@ uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, int *pa
                 return ERROR;
             }
 
+            switch (head->status) {
+                /*
+                 * We'll send an interrupt signal when OOB data is discovered
+                 */
+                case OOB:
+                    oob_data = data[0];
+                    raise(SIGINT);
+                    break;
 
-            if (head->status != DATA) {
-                switch (head->status) {
-                    /*
-                     * We'll send an interrupt signal when OOB data is discovered
-                     */
-                    case OOB:
-                        oob_data = data[0];
-                        raise(SIGINT);
+                case CLOSE:
+                    close(socket);
+                    reset_timeout();
+                    return CLOSE;
+                    break;
 
-                    case CLOSE:
-                        close(socket);
-                        reset_timeout();
-                        return CLOSE;
 
-                    case CORRUPTION :
-                        packets_to_resend[bad_packets] = i;
-                        bad_packets++;
+                case CORRUPTION :
+                    packets_to_resend[++bad_packets] = head->sequence;
+                    bad_packets++;
+                    break;
 
-                    case RESEND :
-                        packets_to_resend[++bad_packets] = i;
 
-                    case ACKNOWLEDGE:
-                        reset_timeout();
+                case RESEND :
+                    packets_to_resend[++bad_packets] = head->sequence;
+                    bad_packets++;
+                    break;
 
-                    case SECOND_SEND:
+
+                case ACKNOWLEDGE:
+                    reset_timeout();
+                    return RECEIVED_ACK;
+
+
+                case SECOND_SEND :
+                    if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
+                        memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
+                        handle_corruption(socket, src_ip, dst_ip, head->sequence);
+                    } else {
                         receiving_packet_list[head->sequence].iov[2].iov_base = data;
+                    }
+                    break;
 
+                case DATA:
+                    if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
+                        memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
+                        handle_corruption(socket, src_ip, dst_ip, head->sequence);
+                    } else {
+                        receiving_packet_list[head->sequence].iov[2].iov_base = data;
+                    }
+                    break;
 
-                    case DATA:
-                        if (compare_checksum(data,head->msg_size,head->checksum) != SUCCESS){
-                            handle_corruption(socket,src_ip,dst_ip,head->sequence);
-                        } else{
-                            receiving_packet_list[head->sequence].iov[2].iov_base = data;
-                        }
-
-
-
-                }
             }
         }
-
         packets_received++;
-
-
     }
+
+
     return packets_received;
 }
+
 
 /*
  * When OOB data is handled, we want to send an interrupt which will then immediately go to this handler and start processing the OOB data.
@@ -727,6 +743,8 @@ void sig_int_handler() {
 
     if (oob_data == 'd') {
         exit(EXIT_SUCCESS);
+    } else {
+        exit(EXIT_FAILURE);
     }
 
 }
@@ -748,6 +766,8 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
 
     Packet packets[MAX_PACKET_COLLECTION];
     Packet received_packets[MAX_PACKET_COLLECTION];
+
+    signal(SIGINT, sig_int_handler);
 
 
     for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {

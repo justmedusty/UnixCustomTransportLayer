@@ -33,11 +33,10 @@
 #define CLOSE 5
 #define OOB 6
 #define SECOND_SEND 7
-#define INITIAL_TIMEOUT 10
+#define INITIAL_TIMEOUT 15
 #define MAX_TIMEOUT 160
-
 #define SUCCESS 0
-
+#define RECEIVED_ACK 6969
 //This because they're all unsigned 16 bits,
 // so this makes more sense than using 1 since if 1 packet was missing, for example, it would also return 1.
 // 65536 would never come up so this makes more sense as the error code.
@@ -78,6 +77,8 @@ uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t ds
 uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest);
 
 uint16_t handle_close(int socket, uint32_t src_ip, uint32_t dst_ip);
+
+void sig_int_handler();
 
 uint16_t handle_corruption(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_t sequence);
 
