@@ -208,7 +208,7 @@ void reset_timeout() {
 }
 
 void sigalrm_handler() {
-
+    num_timeouts++;
     uint16_t timeout = INITIAL_TIMEOUT;
     for (int i = 0; i < num_timeouts; i++) {
         timeout *= 2;
@@ -603,7 +603,7 @@ void get_transport_packet_host_ready(struct iovec iov[3]) {
 
 
 uint16_t
-send_packet_collection(int socket, uint16_t num_packets, Packet packets[], int failed_packet_seq[PACKET_SIZE]) {
+send_packet_collection(int socket, uint16_t num_packets, Packet packets[], uint16_t failed_packet_seq[PACKET_SIZE]) {
 
     memset(failed_packet_seq, 0, PACKET_SIZE);
     int failed_packets = 0;
@@ -651,7 +651,7 @@ send_packet_collection(int socket, uint16_t num_packets, Packet packets[], int f
  *
  */
 
-uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, int *packets_to_resend, uint32_t src_ip,uint32_t dst_ip) {
+uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip) {
 
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
     int i = 0;
@@ -769,99 +769,57 @@ void sig_int_handler() {
  *
  */
 void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
-
     Packet packets[MAX_PACKET_COLLECTION];
     Packet received_packets[MAX_PACKET_COLLECTION];
 
     signal(SIGINT, sig_int_handler);
-
-
-    for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
-        uint16_t result;
-        result = allocate_packet(&packets[i]);
-        if (result == ERROR) {
-            fprintf(stderr, "Error allocing packets %d\n", i);
-            exit(EXIT_FAILURE);
-        }
-        result = allocate_packet(&received_packets[i]);
-        if (result == ERROR) {
-            fprintf(stderr, "Error allocing received packets %d\n", i);
-            exit(EXIT_FAILURE);
-        }
-    }
-    int failed_packet_seq[MAX_PACKET_COLLECTION];
-
-
-    const char welcome_msg[] = "Welcome to the raw socket server, we are building our own transport layer on top of the IP/network layer of the OSI!";
-    uint16_t packets_filled = packetize_data(packets, (char *) welcome_msg, 1, src_ip, dest_ip);
-    printf("packets_filled");
-
-
-    if (packets_filled == ERROR) {
-        fprintf(stderr, "Error occurred while packetizing data.\n");
-        for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
-            free_packet(&packets[i]);
-            free_packet(&received_packets[i]);
-        }
-        EXIT_FAILURE;
-    }
-
-    uint16_t failed_packets;
     signal(SIGALRM, sigalrm_handler);
 
     while (true) {
+        // Prepare welcome message
+        const char welcome_msg[] = "Welcome to the raw socket server!";
 
-
-        failed_packets = send_packet_collection(socket, packets_filled, packets, failed_packet_seq);
-
-        if (failed_packets == SUCCESS) {
-
-            memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
-            receive_data_packets(received_packets, socket, failed_packet_seq, src_ip, dest_ip);
-
-        } else if (failed_packets == ERROR) {
-
+        // Packetize and send welcome message
+        uint16_t packets_filled = packetize_data(packets, (char *)welcome_msg, 1, src_ip, dest_ip);
+        if (packets_filled == ERROR) {
+            fprintf(stderr, "Error occurred while packetizing data.\n");
+            break;
+        }
+        uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
+        uint16_t failed_packets = send_packet_collection(socket, packets_filled, packets, failed_packet_seq);
+        if (failed_packets != SUCCESS) {
             fprintf(stderr, "Error occurred while sending packets.\n");
-            for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
-                free_packet(&packets[i]);
-                free_packet(&received_packets[i]);
-            }
-
-            return;
-
-        } else {
-
-            num_timeouts++;
-
-            if (num_timeouts > 3) {
-
-                fprintf(stderr, "Maximum number of timeouts reached. Exiting.\n");
-                for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
-                    free_packet(&packets[i]);
-                    free_packet(&received_packets[i]);
-                }
-                return;
-            }
+            break;
         }
 
-        // Close the connection
+        // Receive echoed message
+        memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
+        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip, dest_ip);
+        if (packets_received == ERROR) {
+            fprintf(stderr, "Error occurred while receiving packets.\n");
+            break;
+        }
+
+        // Echo the received message back to the client
+        failed_packets = send_packet_collection(socket, packets_received, received_packets, failed_packet_seq);
+        if (failed_packets != SUCCESS) {
+            fprintf(stderr, "Error occurred while sending echoed packets.\n");
+            break;
+        }
+
+        // Close the connection if necessary
         if (handle_close(socket, src_ip, dest_ip) == ERROR) {
             fprintf(stderr, "Error occurred while handling connection close.\n");
-
-            for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
-                free_packet(&packets[i]);
-                free_packet(&received_packets[i]);
-                close(socket);
-            }
-            return;
+            break;
         }
-
     }
 
+    // Clean up allocated memory
     for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
         free_packet(&packets[i]);
         free_packet(&received_packets[i]);
     }
 
-    exit(EXIT_SUCCESS);
+    // Close the socket
+    close(socket);
 }
