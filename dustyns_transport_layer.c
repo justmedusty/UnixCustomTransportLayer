@@ -239,6 +239,7 @@ void reset_timeout() {
 void sigalrm_handler() {
     num_timeouts++;
     uint16_t timeout = INITIAL_TIMEOUT;
+    write(1,"SIGALRM",7);
     for (int i = 0; i < num_timeouts; i++) {
         timeout *= 2;
     }
@@ -781,6 +782,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_
  */
 void sig_int_handler() {
 
+    write(1,"SIGINT OOB",10);
     if (oob_data == 'd') {
         exit(EXIT_SUCCESS);
     } else {
@@ -808,6 +810,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
 
     signal(SIGINT, sig_int_handler);
     signal(SIGALRM, sigalrm_handler);
+
     // Prepare welcome message
     const char welcome_msg[] = "Welcome to the raw socket server!";
 
@@ -816,6 +819,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
         fprintf(stderr, "Error occurred while packetizing data.\n");
         goto cleanup;
     }
+
     // Packetize and send welcome message
     uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
     uint16_t failed_packets = send_packet_collection(socket, packets_filled, packets, failed_packet_seq);
