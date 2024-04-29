@@ -54,7 +54,6 @@ typedef struct Header {
     uint16_t sequence;
     uint16_t msg_size;
     uint16_t dest_process_id;
-    uint16_t source_process_id;
     /*
      * This will mark the last packet in the stream, it will let us know when to stop processing this set of packets.
      */
@@ -70,7 +69,7 @@ uint16_t free_packet(Packet *packet);
 
 uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum);
 
-uint16_t calculate_checksum(char *data[], size_t length);
+uint16_t calculate_checksum(char data[], size_t length);
 
 void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint16_t pid);
 
@@ -88,8 +87,7 @@ uint16_t set_packet_timeout();
 
 void reset_timeout();
 
-uint16_t
-packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip, uint32_t dest_ip,uint16_t pid);
+uint16_t packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip, uint32_t dest_ip,uint16_t pid);
 
 void get_transport_packet_host_ready(struct iovec iov[3]);
 
@@ -97,7 +95,7 @@ void get_transport_packet_wire_ready(struct iovec iov[3]);
 
 uint16_t send_oob_data(int socket, char oob_char, uint32_t src_ip, uint32_t dst_ip,uint16_t pid);
 
-uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip);
+uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip,uint16_t pid);
 
 uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets[], uint16_t failed_packet_seq[MAX_PACKET_COLLECTION],uint16_t pid);
 

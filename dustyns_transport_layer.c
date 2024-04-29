@@ -130,16 +130,18 @@ packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uin
             exit(EXIT_FAILURE);
         }
 
+
+
+
         /*  Calculate the number of bytes to copy into this packet.
             If the remaining bytes to copy (remaining_bytes) is greater than the size of the payload buffer (PAYLOAD_SIZE),
             set bytes_to_copy to PAYLOAD_SIZE, indicating that a full payload buffer is copied.
             Otherwise, set bytes_to_copy to the remaining_bytes, ensuring that only the remaining data is copied into the payload buffer.
         */
-
         size_t bytes_to_copy = remaining_bytes > PAYLOAD_SIZE ? PAYLOAD_SIZE : remaining_bytes;
         memcpy(packet_buff, data_buff + (source_length - remaining_bytes), bytes_to_copy);
-        memcpy(packet[i].iov[2].iov_base, packet_buff, bytes_to_copy);
-
+      // segfault mania  memcpy(packet[i].iov[2].iov_base, packet_buff, bytes_to_copy);
+        packet[i].iov[2].iov_base = packet_buff;
         remaining_bytes -= bytes_to_copy;
 
         Header header = {
@@ -276,13 +278,13 @@ void sigalrm_handler() {
  * Nice and simple, we like that around here
  */
 
-uint16_t calculate_checksum(char *data[], size_t length) {
+uint16_t calculate_checksum(char data[], size_t length) {
 
     uint16_t checksum = 0;
 
     for (size_t i = 0; i < length; i++) {
-        char *byte = data[i];
-        checksum ^= *byte;
+        char byte = data[i];
+        checksum ^= byte;
     }
     return checksum;
 }
@@ -339,7 +341,7 @@ uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip, uint32_t dest_
     for (int i = 0; i <= last_received; ++i) {
         if (!sequence_received[i]) {
             // Packet with sequence i is missing, send RESEND
-            send_resend(socket, i, src_ip, dest_ip);
+            send_resend(socket, i, src_ip, dest_ip,pid);
             missing_packets += 1;
         }
     }
@@ -349,7 +351,7 @@ uint16_t handle_ack(int socket, Packet *packets, uint32_t src_ip, uint32_t dest_
 
     } else {
 
-        if (send_ack(socket, highest_packet_received, src_ip, dest_ip) != SUCCESS) {
+        if (send_ack(socket, highest_packet_received, src_ip, dest_ip,pid) != SUCCESS) {
             return ERROR;
         }
 
@@ -711,7 +713,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_
              */
             continue;
         }
-        if(head->process_id != pid){
+        if(head->dest_process_id != pid){
             /*
              * This is for another process, continue the loop
              */
@@ -723,7 +725,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_
         char data[head->msg_size];
 
         if (head->packet_end == head->sequence &&
-            (return_value = handle_ack(socket, receiving_packet_list, src_ip, dst_ip)) == SUCCESS) {
+            (return_value = handle_ack(socket, receiving_packet_list, src_ip, dst_ip,pid)) == SUCCESS) {
             receiving_packet_list[i] = *(Packet *) &msg;
             return SUCCESS;
         } else {
@@ -765,7 +767,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_
                 case SECOND_SEND :
                     if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
                         memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
-                        handle_corruption(socket, src_ip, dst_ip, head->sequence);
+                        handle_corruption(socket, src_ip, dst_ip, head->sequence,pid);
                     } else {
                         receiving_packet_list[head->sequence].iov[2].iov_base = data;
                     }
@@ -774,7 +776,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_
                 case DATA:
                     if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
                         memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
-                        handle_corruption(socket, src_ip, dst_ip, head->sequence);
+                        handle_corruption(socket, src_ip, dst_ip, head->sequence,pid);
                     } else {
                         receiving_packet_list[head->sequence].iov[2].iov_base = data;
                     }
@@ -833,7 +835,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint
     const char welcome_msg[] = "Welcome to the raw socket server!";
 
 
-    uint16_t packets_filled = packetize_data(packets, (char *) welcome_msg, 1, src_ip, dest_ip);
+    uint16_t packets_filled = packetize_data(packets, (char *) welcome_msg, 1, src_ip, dest_ip,pid);
     if (packets_filled == ERROR) {
         fprintf(stderr, "Error occurred while packetizing data.\n");
         goto cleanup;
@@ -843,7 +845,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint
 
     // Packetize and send welcome message
     uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
-    uint16_t failed_packets = send_packet_collection(socket, packets_filled, packets, failed_packet_seq);
+    uint16_t failed_packets = send_packet_collection(socket, packets_filled, packets, failed_packet_seq,pid);
     if (failed_packets != SUCCESS) {
         fprintf(stderr, "Error occurred while sending packets.\n");
         goto cleanup;
@@ -853,14 +855,14 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint
 
         // Receive echoed message
         memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
-        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip, dest_ip);
+        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip, dest_ip,pid);
         if (packets_received == ERROR) {
             fprintf(stderr, "Error occurred while receiving packets.\n");
             goto cleanup;
         }
 
         // Echo the received message back to the client
-        failed_packets = send_packet_collection(socket, packets_received, received_packets, failed_packet_seq);
+        failed_packets = send_packet_collection(socket, packets_received, received_packets, failed_packet_seq,pid);
         if (failed_packets != SUCCESS) {
             fprintf(stderr, "Error occurred while sending echoed packets.\n");
             goto cleanup;
@@ -873,7 +875,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint
     cleanup:
 
     // Handle connection close
-    if (handle_close(socket, src_ip, dest_ip) == ERROR) {
+    if (handle_close(socket, src_ip, dest_ip,pid) == ERROR) {
         fprintf(stderr, "Error occurred while handling connection close.\n");
     }
 
