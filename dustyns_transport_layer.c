@@ -667,7 +667,11 @@ uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_
     while (recvmsg(socket, &msg, 0) != 0) {
 
         ip_hdr = receiving_packet_list[i].iov[0].iov_base;
-        if (ip_hdr->saddr != src_ip) {
+
+        if (ip_hdr->saddr != dst_ip) {
+            /*
+             * This is for another IP address, not ours
+             */
             continue;
         }
         head = receiving_packet_list[i].iov[1].iov_base;
@@ -808,10 +812,11 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
         }
 
         // Close the connection if necessary
-        if (handle_close(socket, src_ip, dest_ip) == ERROR) {
-            fprintf(stderr, "Error occurred while handling connection close.\n");
-            break;
-        }
+
+    }
+
+    if (handle_close(socket, src_ip, dest_ip) == ERROR) {
+        fprintf(stderr, "Error occurred while handling connection close.\n");
     }
 
     // Clean up allocated memory
@@ -822,4 +827,5 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
 
     // Close the socket
     close(socket);
+    exit(EXIT_SUCCESS);
 }

@@ -56,13 +56,16 @@ int main() {
                       INET6_ADDRSTRLEN);
             printf("New connection on socket %d from address %s\n", new_fd, client_ip);
 
+
             pid_t child = fork();
 
             if (child < 0) {
                 perror("fork");
             }
             if (child == 0) {
-                handle_client_connection(new_fd);
+                uint32_t cli = getpeername(new_fd,(struct sockaddr *)&client_address,&addr_len);
+                uint32_t serv = getsockname(listener,(struct sockaddr *)&client_address,&addr_len);
+                handle_client_connection(new_fd,serv,cli);
                 exit(EXIT_SUCCESS);
             } else {
                 close(new_fd);
