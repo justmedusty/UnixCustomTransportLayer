@@ -20,7 +20,6 @@
 #define PORT "6969"
 
 void *get_internet_addresses(struct sockaddr *sock_address);
-int get_listener();
 void signal_child_handler(int socket);
 
 #endif //UNIXCUSTOMTRANSPORTLAYER_SERVER_HELPER_FUNCTIONS_H

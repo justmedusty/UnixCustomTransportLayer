@@ -115,12 +115,25 @@ packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uin
      * A loop for iterating through each packet and filling the ip header,
      * the transport header, the transport data, all the while we will set the packets_filled each time to the new number of packets filled
      */
+
+
     for (int i = 0; i < packet_array_len; ++i) {
 
+        fprintf(stderr,"%d\n",i);
         char packet_buff[PAYLOAD_SIZE];
 
         size_t bytes_copied;
-        fill_ip_header(packet->iov[0].iov_base, src_ip, dest_ip);
+        /*
+         * This causes seg fault because there is no iphdr assigned to it yet
+         *
+         *
+         *
+         *
+         */
+        if (fill_ip_header((struct iphdr *) packet[i].iov[0].iov_base, src_ip, dest_ip) != SUCCESS){
+            fprintf(stderr,"Err filling ip hdr\n");
+            exit(EXIT_FAILURE);
+        }
 
         /*  Calculate the number of bytes to copy into this packet.
             If the remaining bytes to copy (remaining_bytes) is greater than the size of the payload buffer (PAYLOAD_SIZE),
@@ -131,7 +144,6 @@ packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uin
         size_t bytes_to_copy = remaining_bytes > PAYLOAD_SIZE ? PAYLOAD_SIZE : remaining_bytes;
 
         memcpy(packet_buff, data_buff + (source_length - remaining_bytes), bytes_to_copy);
-
         memcpy(packet[i].iov[2].iov_base, packet_buff, bytes_to_copy);
 
         remaining_bytes -= bytes_to_copy;
@@ -683,7 +695,6 @@ send_packet_collection(int socket, uint16_t num_packets, Packet packets[], uint1
 
 uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,
                               uint32_t dst_ip) {
-
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
     int i = 0;
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
@@ -811,14 +822,21 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
     signal(SIGINT, sig_int_handler);
     signal(SIGALRM, sigalrm_handler);
 
+    for(int i = 0;i<MAX_PACKET_COLLECTION;i++){
+        allocate_packet(&packets[i]);
+    }
+
     // Prepare welcome message
     const char welcome_msg[] = "Welcome to the raw socket server!";
+
 
     uint16_t packets_filled = packetize_data(packets, (char *) welcome_msg, 1, src_ip, dest_ip);
     if (packets_filled == ERROR) {
         fprintf(stderr, "Error occurred while packetizing data.\n");
         goto cleanup;
     }
+
+
 
     // Packetize and send welcome message
     uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
