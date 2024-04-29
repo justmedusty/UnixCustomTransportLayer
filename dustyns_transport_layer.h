@@ -32,6 +32,7 @@
 #define CLOSE 5
 #define OOB 6
 #define SECOND_SEND 7
+#define NO_BUFFER_SPACE 50000
 #define INITIAL_TIMEOUT 15
 #define MAX_TIMEOUT 160
 #define SUCCESS 0
@@ -101,5 +102,7 @@ uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet packets
 uint16_t missing_packets(int socket, uint16_t sequence, uint32_t src_ip, uint32_t dst_ip);
 
 void sigalrm_handler();
+
+uint16_t dump_packet_collection_payload_into_buffer(Packet packet[], char data_buff[], uint64_t buff_size,uint16_t packet_array_len);
 
 #endif //UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H

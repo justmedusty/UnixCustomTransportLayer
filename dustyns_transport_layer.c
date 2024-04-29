@@ -156,6 +156,35 @@ packetize_data(Packet packet[], char data_buff[], uint16_t packet_array_len, uin
 }
 
 /*
+ * Right now I am just going to handle string data I won't account for binary data as of now I will get this protocol tested and working before I worry about catering to binary
+ * transfer. That will come soon though.
+ *
+ * This will just take the packet collection you just received and dump it into your buffer!.
+ *
+ * We will use strcat since it handles null termination for us, memcpy doesnt. This will change I will
+ * come back to this later.
+ */
+uint16_t dump_packet_collection_payload_into_buffer(Packet packet[], char data_buff[], uint64_t buff_size,
+                                                    uint16_t packet_array_len) {
+
+    uint64_t buffer_max = 0;
+
+    for (int i = 0; i < packet_array_len; i++) {
+
+        strcat(data_buff, packet[i].iov[2].iov_base);
+        buff_size += strlen(packet[i].iov[2].iov_base);
+
+        if (buffer_max >= (buff_size - 256)) {
+            return NO_BUFFER_SPACE;
+        }
+
+    }
+    return SUCCESS;
+
+
+}
+
+/*
  * This will set the alarm for a packet timeout
  * A custom timer is allowed, however, the default will be
  * the value of the TIMEOUT macro. This will set an alarm
@@ -651,7 +680,8 @@ send_packet_collection(int socket, uint16_t num_packets, Packet packets[], uint1
  *
  */
 
-uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip) {
+uint16_t receive_data_packets(Packet *receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,
+                              uint32_t dst_ip) {
 
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
     int i = 0;
@@ -778,43 +808,46 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
 
     signal(SIGINT, sig_int_handler);
     signal(SIGALRM, sigalrm_handler);
+    // Prepare welcome message
+    const char welcome_msg[] = "Welcome to the raw socket server!";
+
+    uint16_t packets_filled = packetize_data(packets, (char *) welcome_msg, 1, src_ip, dest_ip);
+    if (packets_filled == ERROR) {
+        fprintf(stderr, "Error occurred while packetizing data.\n");
+        goto cleanup;
+    }
+    // Packetize and send welcome message
+    uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
+    uint16_t failed_packets = send_packet_collection(socket, packets_filled, packets, failed_packet_seq);
+    if (failed_packets != SUCCESS) {
+        fprintf(stderr, "Error occurred while sending packets.\n");
+        goto cleanup;
+    }
 
     while (true) {
-        // Prepare welcome message
-        const char welcome_msg[] = "Welcome to the raw socket server!";
-
-        // Packetize and send welcome message
-        uint16_t packets_filled = packetize_data(packets, (char *)welcome_msg, 1, src_ip, dest_ip);
-        if (packets_filled == ERROR) {
-            fprintf(stderr, "Error occurred while packetizing data.\n");
-            break;
-        }
-        uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
-        uint16_t failed_packets = send_packet_collection(socket, packets_filled, packets, failed_packet_seq);
-        if (failed_packets != SUCCESS) {
-            fprintf(stderr, "Error occurred while sending packets.\n");
-            break;
-        }
 
         // Receive echoed message
         memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
         uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip, dest_ip);
         if (packets_received == ERROR) {
             fprintf(stderr, "Error occurred while receiving packets.\n");
-            break;
+            goto cleanup;
         }
 
         // Echo the received message back to the client
         failed_packets = send_packet_collection(socket, packets_received, received_packets, failed_packet_seq);
         if (failed_packets != SUCCESS) {
             fprintf(stderr, "Error occurred while sending echoed packets.\n");
-            break;
+            goto cleanup;
         }
-
-        // Close the connection if necessary
 
     }
 
+
+
+    cleanup:
+
+    // Handle connection close
     if (handle_close(socket, src_ip, dest_ip) == ERROR) {
         fprintf(stderr, "Error occurred while handling connection close.\n");
     }
@@ -824,8 +857,8 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip) {
         free_packet(&packets[i]);
         free_packet(&received_packets[i]);
     }
-
-    // Close the socket
     close(socket);
+
     exit(EXIT_SUCCESS);
+
 }
