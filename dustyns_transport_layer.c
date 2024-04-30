@@ -453,7 +453,7 @@ uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t ds
 
 uint16_t handle_corruption(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_t sequence,uint16_t pid) {
 
-    Packet packet;
+    Packet *packet;
 
     allocate_packet(&packet);
 
@@ -469,13 +469,13 @@ uint16_t handle_corruption(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_
 
     fill_ip_header(&ip_hdr, src_ip, dst_ip);
 
-    packet.iov[0].iov_base = &ip_hdr;
-    packet.iov[1].iov_base = &header;
+    packet->iov[0].iov_base = &ip_hdr;
+    packet->iov[1].iov_base = &header;
 
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = packet.iov;
+    message.msg_iov = packet->iov;
     message.msg_iovlen = 1;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
@@ -715,13 +715,24 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
     uint16_t return_value = ERROR;
     int bad_packets = 0;
     int packets_received = 0;
+    int packets_sniffed = 0;
 
 
-    while (recvmsg(socket, &msg, 0) != 0) {
+    while ((packets_sniffed = recvmsg(socket, &msg, 0)) != 0) {
+        perror("recvmsg");
         fprintf(stdout,"Receiving msg\n");
 
+        msg.msg_iov[0].iov_base = &receiving_packet_list[i]->iov[0].iov_base;
+        msg.msg_iov[0].iov_len = receiving_packet_list[i]->iov[0].iov_len;
+
+        msg.msg_iov[1].iov_base = &receiving_packet_list[i]->iov[1].iov_base;
+        msg.msg_iov[1].iov_len = receiving_packet_list[i]->iov[1].iov_len;
+
+        msg.msg_iov[2].iov_base = &receiving_packet_list[i]->iov[2].iov_base;
+        msg.msg_iov[2].iov_len = receiving_packet_list[i]->iov[2].iov_len;
+
         ip_hdr = receiving_packet_list[i]->iov[0].iov_base;
-        head = receiving_packet_list[i]->iov[1].iov_base;
+       head = receiving_packet_list[i]->iov[1].iov_base;
 
 
         if (ip_hdr->saddr != dst_ip) {
@@ -840,14 +851,15 @@ void sig_int_handler() {
  */
 
 void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint16_t pid) {
-    Packet packets[MAX_PACKET_COLLECTION];
-    Packet received_packets[MAX_PACKET_COLLECTION];
+    Packet *packets[MAX_PACKET_COLLECTION];
+    Packet *received_packets[MAX_PACKET_COLLECTION];
 
     signal(SIGINT, sig_int_handler);
     signal(SIGALRM, sigalrm_handler);
 
     for(int i = 0;i<MAX_PACKET_COLLECTION;i++){
         allocate_packet(&packets[i]);
+        allocate_packet(&received_packets[i]);
     }
 
     char msg_buff[4096];
