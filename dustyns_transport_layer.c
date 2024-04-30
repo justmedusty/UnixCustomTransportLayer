@@ -126,7 +126,7 @@ packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, ui
     for (int i = 0; i < packet_array_len; ++i) {
 
         char packet_buff[PAYLOAD_SIZE];
-
+        allocate_packet(&packet[i]);
         size_t bytes_copied;
 
         struct iphdr ip_hdr;
@@ -413,7 +413,7 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
  */
 uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t dst_ip,uint16_t pid) {
 
-    Packet packet;
+    Packet *packet;
 
     allocate_packet(&packet);
 
@@ -426,12 +426,12 @@ uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t ds
     };
     struct iphdr ip_hdr;
     fill_ip_header(&ip_hdr, src_ip, dst_ip);
-    packet.iov[0].iov_base = &ip_hdr;
-    packet.iov[1].iov_base = &header;
+    packet->iov[0].iov_base = &ip_hdr;
+    packet->iov[1].iov_base = &header;
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = packet.iov;
+    message.msg_iov = packet->iov;
     message.msg_iovlen = 2;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
@@ -569,7 +569,7 @@ uint16_t send_oob_data(int socket, char oob_char, uint32_t src_ip, uint32_t dst_
  */
 uint16_t handle_close(int socket, uint32_t src_ip, uint32_t dst_ip,uint16_t pid) {
 
-    Packet packet;
+    Packet *packet;
     allocate_packet(&packet);
     struct iphdr ip_hdr;
 
@@ -584,12 +584,12 @@ uint16_t handle_close(int socket, uint32_t src_ip, uint32_t dst_ip,uint16_t pid)
 
     fill_ip_header(&ip_hdr, src_ip, dst_ip);
 
-    packet.iov[0].iov_base = &ip_hdr;
-    packet.iov[1].iov_base = &header;
+    packet->iov[0].iov_base = &ip_hdr;
+    packet->iov[1].iov_base = &header;
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
-    message.msg_iov = packet.iov;
+    message.msg_iov = packet->iov;
     message.msg_iovlen = 2;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
@@ -709,35 +709,45 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
     int i = 0;
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
-    struct msghdr msg;
-    memset(&msg,0,sizeof (struct msghdr));
+    struct msghdr *msg = malloc(sizeof (struct msghdr));
+    if(msg == NULL){
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+    msg->msg_iovlen = 3;
+    memset(msg,0,sizeof (struct msghdr));
     struct iphdr *ip_hdr;
     Header *head;
     uint16_t return_value = ERROR;
     int bad_packets = 0;
     int packets_received = 0;
-    int packets_sniffed = 0;
+    ssize_t packets_sniffed = 0;
+    int packets_sent = 0;
 
 
     while (true) {
-        packets_sniffed = recvmsg(socket, &msg, 0);
+        packets_sniffed = recvmsg(socket, msg, 0);
         if(packets_sniffed < 0){
             perror("recvmsg");
             exit(EXIT_FAILURE);
         }
-        if(msg.msg_iovlen > PACKET_SIZE || msg.msg_iovlen < 0){
+        if(msg->msg_iovlen > PACKET_SIZE){
             continue;
         }
         fprintf(stdout,"Receiving msg\n");
 
-        msg.msg_iov[0].iov_base = &receiving_packet_list[i]->iov[0].iov_base;
-        msg.msg_iov[0].iov_len = receiving_packet_list[i]->iov[0].iov_len;
+        allocate_packet(&receiving_packet_list[packets_received]);
 
-        msg.msg_iov[1].iov_base = &receiving_packet_list[i]->iov[1].iov_base;
-        msg.msg_iov[1].iov_len = receiving_packet_list[i]->iov[1].iov_len;
+        msg->msg_iov = (struct iovec *) &receiving_packet_list[i];
 
-        msg.msg_iov[2].iov_base = &receiving_packet_list[i]->iov[2].iov_base;
-        msg.msg_iov[2].iov_len = receiving_packet_list[i]->iov[2].iov_len;
+        msg->msg_iov[0].iov_base = &receiving_packet_list[i]->iov[0].iov_base;
+        msg->msg_iov[0].iov_len = receiving_packet_list[i]->iov[0].iov_len;
+
+        msg->msg_iov[1].iov_base = &receiving_packet_list[i]->iov[1].iov_base;
+        msg->msg_iov[1].iov_len = receiving_packet_list[i]->iov[1].iov_len;
+
+        msg->msg_iov[2].iov_base = &receiving_packet_list[i]->iov[2].iov_base;
+        msg->msg_iov[2].iov_len = receiving_packet_list[i]->iov[2].iov_len;
 
         ip_hdr = receiving_packet_list[i]->iov[0].iov_base;
        head = receiving_packet_list[i]->iov[1].iov_base;
@@ -865,10 +875,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint
     signal(SIGINT, sig_int_handler);
     signal(SIGALRM, sigalrm_handler);
 
-    for(int i = 0;i<MAX_PACKET_COLLECTION;i++){
-        allocate_packet(&packets[i]);
-        allocate_packet(&received_packets[i]);
-    }
+
 
     char msg_buff[4096];
 
@@ -929,11 +936,6 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip,uint
         fprintf(stderr, "Error occurred while handling connection close.\n");
     }
 
-    // Clean up allocated memory
-    for (int i = 0; i < MAX_PACKET_COLLECTION; i++) {
-        free_packet(&packets[i]);
-        free_packet(&received_packets[i]);
-    }
     close(socket);
 
     exit(EXIT_SUCCESS);
