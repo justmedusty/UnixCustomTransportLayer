@@ -720,11 +720,14 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
 
     while (true) {
-        recvmsg(socket, &msg, 0);
+        packets_sniffed = recvmsg(socket, &msg, 0);
+        if(packets_sniffed < 0){
+            perror("recvmsg");
+            exit(EXIT_FAILURE);
+        }
         if(msg.msg_iovlen > PACKET_SIZE || msg.msg_iovlen < 0){
             continue;
         }
-        perror("recvmsg");
         fprintf(stdout,"Receiving msg\n");
 
         msg.msg_iov[0].iov_base = &receiving_packet_list[i]->iov[0].iov_base;
