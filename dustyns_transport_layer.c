@@ -713,13 +713,26 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
     int i = 0;
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
-    struct msghdr *msg = malloc(sizeof (struct msghdr));
-    if(msg == NULL){
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-    msg->msg_iovlen = 3;
-    memset(msg,0,sizeof (struct msghdr));
+    struct msghdr msg;
+    struct iovec iov[3];
+
+// Initialize the msghdr struct
+    msg.msg_name = NULL;
+    msg.msg_namelen = 0;
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 3;
+    msg.msg_control = malloc(128);
+    msg.msg_controllen = 128;
+    msg.msg_flags = 0;
+
+// Initialize the iovec structs
+    iov[0].iov_base = malloc(PACKET_SIZE);
+    iov[0].iov_len = PACKET_SIZE;
+    iov[1].iov_base = malloc(HEADER_SIZE);
+    iov[1].iov_len = HEADER_SIZE;
+    iov[2].iov_base = malloc(PAYLOAD_SIZE);
+    iov[2].iov_len = PAYLOAD_SIZE;
+
     struct iphdr *ip_hdr;
     Header *head;
     uint16_t return_value = ERROR;
@@ -729,36 +742,30 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
 
     while (true) {
-        msg->msg_iov = malloc(msg->msg_iovlen * sizeof(struct iovec));
-        if (msg->msg_iov == NULL) {
-            perror("malloc");
-            exit(EXIT_FAILURE);
-        }
-        packets_sniffed = recvmsg(socket, msg, 0);
+        packets_sniffed = recvmsg(socket, &msg, 0);
         if(packets_sniffed < 0){
             perror("recvmsg");
             exit(EXIT_FAILURE);
         }
-        if(msg->msg_iovlen > PACKET_SIZE){
+        if(msg.msg_iovlen > PACKET_SIZE){
             continue;
         }
         fprintf(stdout,"Receiving msg\n");
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
-        memcpy(receiving_packet_list[i]->iov,msg->msg_iov,sizeof (Packet *));
+        memcpy(receiving_packet_list[i]->iov,msg.msg_iov,sizeof (Packet *));
 
 
-        ip_hdr = receiving_packet_list[i]->iov[0].iov_base;
+    //    ip_hdr = receiving_packet_list[i]->iov[0].iov_base;
        head = receiving_packet_list[i]->iov[1].iov_base;
 
 
-        if (ip_hdr->saddr != dst_ip) {
+   //     if (ip_hdr->saddr != dst_ip) {
             /*
              * This is for another IP address, not ours
              */
-            continue;
-        }
+     //       continue;
         if(head->dest_process_id != pid){
             /*
              * This is for another process, continue the loop
