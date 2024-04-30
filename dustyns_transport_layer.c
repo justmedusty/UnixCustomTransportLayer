@@ -247,7 +247,7 @@ void reset_timeout() {
 void sigalrm_handler() {
     num_timeouts++;
     uint16_t timeout = INITIAL_TIMEOUT;
-    write(1,"SIGALRM",7);
+    write(1,"SIGALRM\n",8);
     for (int i = 0; i < num_timeouts; i++) {
         timeout *= 2;
     }
@@ -296,7 +296,7 @@ uint16_t calculate_checksum(char data[], size_t length) {
 
 uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum) {
 
-    uint16_t new_checksum = calculate_checksum(&data, length);
+    uint16_t new_checksum = calculate_checksum(data, length);
     if ((new_checksum ^ received_checksum) != 0) {
         return (uint8_t) ERROR;
     } else {
