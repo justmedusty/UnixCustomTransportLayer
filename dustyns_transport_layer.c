@@ -180,23 +180,27 @@ packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, ui
  * We will use strcat since it handles null termination for us, memcpy doesnt. This will change I will
  * come back to this later.
  */
-uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char data_buff[], uint64_t buff_size,uint16_t packet_array_len) {
-
+uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char data_buff[], uint64_t buff_size, uint16_t packet_array_len) {
     uint64_t buffer_max = 0;
 
     for (int i = 0; i < packet_array_len; i++) {
+        char *payload = packet[i]->iov[2].iov_base;
+        size_t payload_len = packet[i]->iov[2].iov_len;
 
-        strcat(data_buff, packet[i]->iov[2].iov_base);
-        buff_size += strlen(packet[i]->iov[2].iov_base);
-
-        if (buffer_max >= (buff_size - 256)) {
+        // Check if there's enough space in the buffer
+        if (buffer_max + payload_len >= buff_size) {
             return NO_BUFFER_SPACE;
         }
 
+        // Copy payload data from packet to buffer
+        memcpy(data_buff + buffer_max, payload, payload_len);
+        buffer_max += payload_len;
     }
+
+    // Null-terminate the buffer
+    data_buff[buffer_max] = '\0';
+
     return SUCCESS;
-
-
 }
 
 /*
@@ -722,10 +726,14 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
     int bad_packets = 0;
     int packets_received = 0;
     ssize_t packets_sniffed = 0;
-    int packets_sent = 0;
 
 
     while (true) {
+        msg->msg_iov = malloc(msg->msg_iovlen * sizeof(struct iovec));
+        if (msg->msg_iov == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
         packets_sniffed = recvmsg(socket, msg, 0);
         if(packets_sniffed < 0){
             perror("recvmsg");
@@ -738,16 +746,8 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
-        msg->msg_iov = (struct iovec *) &receiving_packet_list[i];
+        memcpy(receiving_packet_list[i]->iov,msg->msg_iov,sizeof (Packet *));
 
-        msg->msg_iov[0].iov_base = &receiving_packet_list[i]->iov[0].iov_base;
-        msg->msg_iov[0].iov_len = receiving_packet_list[i]->iov[0].iov_len;
-
-        msg->msg_iov[1].iov_base = &receiving_packet_list[i]->iov[1].iov_base;
-        msg->msg_iov[1].iov_len = receiving_packet_list[i]->iov[1].iov_len;
-
-        msg->msg_iov[2].iov_base = &receiving_packet_list[i]->iov[2].iov_base;
-        msg->msg_iov[2].iov_len = receiving_packet_list[i]->iov[2].iov_len;
 
         ip_hdr = receiving_packet_list[i]->iov[0].iov_base;
        head = receiving_packet_list[i]->iov[1].iov_base;
