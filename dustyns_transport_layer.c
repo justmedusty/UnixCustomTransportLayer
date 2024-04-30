@@ -710,6 +710,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
     int i = 0;
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
     struct msghdr msg;
+    memset(&msg,0,sizeof (struct msghdr));
     struct iphdr *ip_hdr;
     Header *head;
     uint16_t return_value = ERROR;
@@ -718,7 +719,11 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
     int packets_sniffed = 0;
 
 
-    while ((packets_sniffed = recvmsg(socket, &msg, 0)) != 0) {
+    while (true) {
+        recvmsg(socket, &msg, 0);
+        if(msg.msg_iovlen > PACKET_SIZE || msg.msg_iovlen < 0){
+            continue;
+        }
         perror("recvmsg");
         fprintf(stdout,"Receiving msg\n");
 
