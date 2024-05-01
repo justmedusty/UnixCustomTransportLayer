@@ -90,9 +90,9 @@ int16_t compare_ip_checksum(struct iphdr *ip_hdr){
     printf("%i",check);
     memset(&ip_hdr->check,0,sizeof(uint16_t));
     uint16_t new_check;
+    new_check = checksum(ip_hdr,sizeof (struct iphdr));
 
-    if(check != checksum(&ip_hdr,sizeof (struct iphdr))){
-
+    if(check != new_check){
         return -1;
     }
     return SUCCESS;
