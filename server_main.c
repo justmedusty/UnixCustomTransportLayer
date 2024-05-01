@@ -10,7 +10,7 @@ int main() {
     int sockfd;
     ssize_t recv_len;
 
-    // Create a raw socket for ICMP packets
+    // Create a raw socket for custom protocol packets
     if ((sockfd = socket(AF_INET, SOCK_RAW, IP_HDRINCL)) == -1) {
         perror("socket");
         exit(EXIT_FAILURE);
