@@ -21,7 +21,7 @@
 
 #define BACKLOG 15
 #define PAYLOAD_SIZE 512
-#define HEADER_SIZE 64
+#define HEADER_SIZE 12
 #define PACKET_SIZE ((sizeof (struct iphdr) + HEADER_SIZE + PAYLOAD_SIZE))
 #define MAX_PACKET_COLLECTION 1000
 #define OUT_OF_BAND_DATA_SIZE 1

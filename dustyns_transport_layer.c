@@ -102,8 +102,7 @@ uint16_t free_packet(Packet **packet) {
  * include proper message size, provide a checksum for the data, fill in the layer 3 header.
  *
  */
-uint16_t
-packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip, uint32_t dest_ip,
+uint16_t packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip, uint32_t dest_ip,
                uint16_t pid) {
 
     //Check they are not passing a packet array larger than the max
@@ -338,9 +337,6 @@ uint16_t handle_ack(int socket, Packet **packets, uint32_t src_ip, uint32_t dest
 
         struct iphdr *ip_hdr = (struct iphdr *) packet->iov[0].iov_base;
 
-        if (ip_hdr->saddr != src_ip) {
-            continue;
-        }
 
         Header *header = (Header *) packet->iov[1].iov_base;
 
@@ -403,10 +399,16 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
     memset(&message, 0, sizeof(message));
     message.msg_iov = packet->iov;
     message.msg_iovlen = 2;
+    struct sockaddr_in destination;
+    memset(&destination, 0, sizeof(destination));
+    destination.sin_family = AF_INET;
+    destination.sin_addr.s_addr = inet_addr("127.0.0.1");
+    message.msg_name = &destination;
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
 
     if (bytes_sent < 0) {
+        perror("sendmsg");
         return ERROR;
     } else {
         return SUCCESS;
@@ -763,9 +765,9 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
-        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, &msg.msg_iov->iov_base, 20);
-        memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 84);
-        memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[84], 512);
+        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, &msg.msg_iov->iov_base ,20);
+        memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 12);
+        memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], 512);
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
         char buff[PAYLOAD_SIZE];
         memcpy(&buff,receiving_packet_list[i]->iov[2].iov_base,PAYLOAD_SIZE);
@@ -776,12 +778,13 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         head = receiving_packet_list[i]->iov[1].iov_base;
 
 
-        if (ip_hdr->saddr != dst_ip) {
+    /*    if (ip_hdr->saddr != dst_ip) {
             /*
              * This is for another IP address, not ours
              */
-            continue;
-        }
+   //         continue;
+ //       }
+
             if (head->dest_process_id != pid) {
                 /*
                  * This is for another process, continue the loop
