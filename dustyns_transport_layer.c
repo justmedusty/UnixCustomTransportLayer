@@ -765,7 +765,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
-        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, &msg.msg_iov->iov_base ,20);
+        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, (struct iphdr *) &msg.msg_iov->iov_base[20] ,20);
         memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 12);
         memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], 512);
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
@@ -774,7 +774,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         printf("%s\n",buff);
 
 
-        ip_hdr = receiving_packet_list[i]->iov[0].iov_base;
+        ip_hdr = (struct iphdr *) receiving_packet_list[packets_received]->iov[0].iov_base;
         head = receiving_packet_list[i]->iov[1].iov_base;
 
 
