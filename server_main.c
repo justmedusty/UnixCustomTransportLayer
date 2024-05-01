@@ -17,7 +17,7 @@ int main() {
     }
 
     printf("getting ready to listen\n");
-    handle_client_connection(sockfd, inet_addr("192.168.68.64"),inet_addr("192.168.68.64"),1000);
+    handle_client_connection(sockfd, inet_addr("127.0.0.1"),inet_addr("127.0.0.1"),1000);
 
     close(sockfd);
     return 0;

@@ -751,6 +751,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
     while (true) {
         packets_sniffed = recvmsg(socket, &msg, 0);
+
         if (packets_sniffed < 0) {
             perror("recvmsg");
             exit(EXIT_FAILURE);
@@ -762,11 +763,12 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
-        memcpy(receiving_packet_list[i]->iov, msg.msg_iov, msg.msg_iov->iov_len);
-        Packet *packet = (Packet *) msg.msg_iov;
-        head = packet->iov[1].iov_base;
+        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, &msg.msg_iov->iov_base, 20);
+        memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[20], 64);
+        memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[84], 512);
+        head = receiving_packet_list[packets_received]->iov[1].iov_base;
         char buff[PAYLOAD_SIZE];
-        memcpy(&buff,receiving_packet_list[i]->iov[2].iov_base,HEADER_SIZE);
+        memcpy(&buff,receiving_packet_list[i]->iov[2].iov_base,PAYLOAD_SIZE);
         printf("%s\n",buff);
 
 
