@@ -764,7 +764,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         allocate_packet(&receiving_packet_list[packets_received]);
 
         memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, &msg.msg_iov->iov_base, 20);
-        memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[20], 64);
+        memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 84);
         memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[84], 512);
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
         char buff[PAYLOAD_SIZE];
