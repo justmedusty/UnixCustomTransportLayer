@@ -763,6 +763,11 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         allocate_packet(&receiving_packet_list[packets_received]);
 
         memcpy(receiving_packet_list[i]->iov, msg.msg_iov, msg.msg_iov->iov_len);
+        Packet *packet = (Packet *) msg.msg_iov;
+        head = packet->iov[1].iov_base;
+        char buff[PAYLOAD_SIZE];
+        memcpy(&buff,receiving_packet_list[i]->iov[2].iov_base,HEADER_SIZE);
+        printf("%s\n",buff);
 
 
         ip_hdr = receiving_packet_list[i]->iov[0].iov_base;
