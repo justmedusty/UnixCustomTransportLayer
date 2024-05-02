@@ -190,7 +190,7 @@ uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char data_
         Header *head = packet[i]->iov[1].iov_base;
         if(head->status != DATA && head->status != RESEND){
             strcat(data_buff, packet[i]->iov[2].iov_base);
-            buff_size += strlen(packet[i]->iov[2].iov_base);
+            buff_size += head->msg_size;
 
             if (buffer_max >= (buff_size - 256)) {
                 return NO_BUFFER_SPACE;
@@ -336,10 +336,12 @@ uint16_t handle_ack(int socket, Packet **packets, uint32_t src_ip, uint32_t dest
 
         if (packet == NULL) break;
 
-        struct iphdr *ip_hdr = packet->iov[0].iov_base;
-
 
         Header *header = (Header *) packet->iov[1].iov_base;
+        if(header->dest_process_id != pid){
+            fprintf(stdout,"Packet for another process\n");
+            free_packet(&packets[i]);
+        }
 
         sequence_received[header->sequence] = true;
 
@@ -782,7 +784,6 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
 
     while (true) {
-        sleep(1);
         packets_sniffed = recvmsg(socket, &msg, 0);
 
         if(packets_sniffed == 0){
@@ -836,6 +837,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
             continue;
         }
         printf("%d sequence \n",head->sequence);
+        fflush(stdout);
 
 
         char data[head->msg_size];
@@ -843,6 +845,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
             (return_value = handle_ack(socket, receiving_packet_list, src_ip, dst_ip, pid)) == SUCCESS)){
             printf("got last packet successfully\n");
+            fflush(stdout);
             return SUCCESS;
         } else {
             if (return_value == ERROR) {
@@ -897,7 +900,6 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
                     break;
 
                 case DATA:
-                    printf("DATA\n");
                     if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
                         memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
                         handle_corruption(socket, src_ip, dst_ip, head->sequence, pid);
