@@ -101,8 +101,6 @@ int16_t compare_ip_checksum(struct iphdr *ip_hdr){
         return -1;
     }
     ip_hdr->check = new_check;
-    printf("SUCCESS MATCH\n");
-    fflush(stdout);
     return SUCCESS;
 }
 

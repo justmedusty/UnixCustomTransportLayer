@@ -368,7 +368,6 @@ uint16_t handle_ack(int socket, Packet **packets, uint32_t src_ip, uint32_t dest
             return ERROR;
         }
 
-        reset_timeout();
         return SUCCESS;
 
     }
@@ -385,6 +384,12 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
     allocate_packet(&packet);
 
     struct iphdr ip_hdr;
+
+
+
+    //max sequence too high putting this here to remember to investigate
+
+
 
     Header header = {
             ACKNOWLEDGE,
@@ -749,7 +754,7 @@ uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet *packet
  *
  */
 
-uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip, uint16_t pid,uint16_t *status) {
+uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip, uint16_t pid,uint16_t *status) {
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
     int i = 0;
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
@@ -796,7 +801,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         if (msg.msg_iovlen > PACKET_SIZE) {
             continue;
         }
-        fprintf(stdout, "Receiving msg\n");
+
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
@@ -805,7 +810,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 12);
         memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], 512);
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
-        char buff[PAYLOAD_SIZE];
+        char buff[head->msg_size];
         if(head->status == DATA || head->status == SECOND_SEND){
             memcpy(&buff, receiving_packet_list[packets_received]->iov[2].iov_base, head->msg_size);
             printf("%s\n", buff);
@@ -829,6 +834,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
              */
             continue;
         }
+
 
         if(compare_ip_checksum(ip_hdr) == -1){
             if (send_resend(socket,head->sequence,src_ip,dst_ip, pid) != SUCCESS){
@@ -870,6 +876,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
                     *status = CLOSE;
 
                 case CORRUPTION :
+                    write(1,"CORRUPTION\n",11);
                     packets_to_resend[++bad_packets] = head->sequence;
                     bad_packets++;
                     break;
@@ -991,7 +998,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
             fprintf(stderr, "Error occurred while receiving packets.\n");
             goto cleanup;
         }
-        if(status != RECEIVED_ACK){
+        if(status != RECEIVED_ACK && status != CLOSE){
             continue;
         }
 
