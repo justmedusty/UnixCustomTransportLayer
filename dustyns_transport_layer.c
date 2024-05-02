@@ -775,15 +775,19 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
     struct iphdr *ip_hdr;
     Header *head;
-    uint16_t return_value = ERROR;
+    uint16_t return_value = SUCCESS;
     int bad_packets = 0;
     int packets_received = 0;
-    ssize_t packets_sniffed = 0;
+    ssize_t packets_sniffed = 1;
 
 
     while (true) {
+        sleep(1);
         packets_sniffed = recvmsg(socket, &msg, 0);
 
+        if(packets_sniffed == 0){
+            break;
+        }
         if (packets_sniffed < 0) {
             perror("recvmsg");
             exit(EXIT_FAILURE);
@@ -808,6 +812,8 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         ip_hdr = (struct iphdr *) receiving_packet_list[packets_received]->iov[0].iov_base;
         head = receiving_packet_list[i]->iov[1].iov_base;
 
+        printf("%d and pid %d\n", head->status,head->dest_process_id);
+
         if (ip_hdr->saddr != dst_ip) {
             /*
              * This is for another IP address, not ours
@@ -815,7 +821,7 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
             continue;
         }
 
-        if (head->dest_process_id != pid) {
+        if (head->dest_process_id != 1000) {
             /*
              * This is for another process, continue the loop
              */
@@ -832,8 +838,8 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
         char data[head->msg_size];
 
-        if (head->packet_end == head->sequence &&
-            (return_value = handle_ack(socket, receiving_packet_list, src_ip, dst_ip, pid)) == SUCCESS) {
+        if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
+            (return_value = handle_ack(socket, receiving_packet_list, src_ip, dst_ip, pid)) == SUCCESS)){
             *receiving_packet_list[i] = *(Packet *) &msg;
             return SUCCESS;
         } else {
