@@ -805,14 +805,15 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
         memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], 512);
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
         char buff[PAYLOAD_SIZE];
-        memcpy(&buff, receiving_packet_list[i]->iov[2].iov_base, PAYLOAD_SIZE);
-        printf("%s\n", buff);
+        if(head->status == DATA || head->status == SECOND_SEND){
+            memcpy(&buff, receiving_packet_list[packets_received]->iov[2].iov_base, head->msg_size);
+            printf("%s\n", buff);
+        }
+
 
 
         ip_hdr = (struct iphdr *) receiving_packet_list[packets_received]->iov[0].iov_base;
-        head = receiving_packet_list[i]->iov[1].iov_base;
-
-        printf("%d and pid %d\n", head->status,head->dest_process_id);
+        head = receiving_packet_list[packets_received]->iov[1].iov_base;
 
         if (ip_hdr->saddr != dst_ip) {
             /*
@@ -834,13 +835,14 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
             }
             continue;
         }
+        printf("%d sequence \n",head->sequence);
 
 
         char data[head->msg_size];
 
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
             (return_value = handle_ack(socket, receiving_packet_list, src_ip, dst_ip, pid)) == SUCCESS)){
-            *receiving_packet_list[i] = *(Packet *) &msg;
+            printf("got last packet successfully\n");
             return SUCCESS;
         } else {
             if (return_value == ERROR) {
