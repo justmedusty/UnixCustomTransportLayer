@@ -182,29 +182,29 @@ packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, ui
  * We will use strcat since it handles null termination for us, memcpy doesnt. This will change I will
  * come back to this later.
  */
-uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char data_buff[], uint64_t buff_size,
-                                                    uint16_t packet_array_len) {
+uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char data_buff[], uint64_t buff_size,uint16_t packet_array_len) {
     uint64_t buffer_max = 0;
 
     for (int i = 0; i < packet_array_len; i++) {
-        char *payload = packet[i]->iov[2].iov_base;
-        size_t payload_len = packet[i]->iov[2].iov_len;
 
-        // Check if there's enough space in the buffer
-        if (buffer_max + payload_len >= buff_size) {
-            return NO_BUFFER_SPACE;
+        Header *head = packet[i]->iov[1].iov_base;
+        if(head->status != DATA && head->status != RESEND){
+            strcat(data_buff, packet[i]->iov[2].iov_base);
+            buff_size += strlen(packet[i]->iov[2].iov_base);
+
+            if (buffer_max >= (buff_size - 256)) {
+                return NO_BUFFER_SPACE;
+            }
         }
 
-        // Copy payload data from packet to buffer
-        memcpy(data_buff + buffer_max, payload, payload_len);
-        buffer_max += payload_len;
+
+
     }
-
-    // Null-terminate the buffer
-    data_buff[buffer_max] = '\0';
-
     return SUCCESS;
+
+
 }
+
 
 /*
  * This will set the alarm for a packet timeout
