@@ -157,7 +157,7 @@ packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, ui
                 DATA,
                 calculate_checksum(packet[i]->iov[2].iov_base, bytes_to_copy),
                 i,
-                sizeof bytes_to_copy,
+                bytes_to_copy,
                 pid
         };
 
