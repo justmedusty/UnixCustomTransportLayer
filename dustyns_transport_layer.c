@@ -336,7 +336,7 @@ uint16_t handle_ack(int socket, Packet **packets, uint32_t src_ip, uint32_t dest
 
         if (packet == NULL) break;
 
-        struct iphdr *ip_hdr = (struct iphdr *) packet->iov[0].iov_base;
+        struct iphdr *ip_hdr = packet->iov[0].iov_base;
 
 
         Header *header = (Header *) packet->iov[1].iov_base;
@@ -392,7 +392,10 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
             pid
     };
 
-    fill_ip_header(&ip_hdr, src, dest);
+    if (fill_ip_header(&ip_hdr, src, dest) != SUCCESS) {
+        fprintf(stderr, "Err filling ip hdr\n");
+        exit(EXIT_FAILURE);
+    }
     packet->iov[0].iov_base = &ip_hdr;
     packet->iov[1].iov_base = &header;
 
@@ -405,6 +408,7 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
     destination.sin_family = AF_INET;
     destination.sin_addr.s_addr = inet_addr("127.0.0.1");
     message.msg_name = &destination;
+    message.msg_namelen = sizeof(struct sockaddr_in);
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
 
@@ -486,7 +490,13 @@ uint16_t handle_corruption(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_
     struct msghdr message;
     memset(&message, 0, sizeof(message));
     message.msg_iov = packet->iov;
-    message.msg_iovlen = 1;
+    message.msg_iovlen = 2;
+    struct sockaddr_in destination;
+    memset(&destination, 0, sizeof(destination));
+    destination.sin_family = AF_INET;
+    destination.sin_addr.s_addr = inet_addr("127.0.0.1");
+    message.msg_name = &destination;
+    message.msg_namelen = sizeof(struct sockaddr_in);
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
     if (bytes_sent < 0) {
@@ -595,13 +605,18 @@ uint16_t handle_close(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_t pid
 
     fill_ip_header(&ip_hdr, src_ip, dst_ip);
 
+    struct sockaddr_in dest_addr;
+    memset(&dest_addr, 0, sizeof(dest_addr));
+
     packet->iov[0].iov_base = &ip_hdr;
     packet->iov[1].iov_base = &header;
 
     struct msghdr message;
     memset(&message, 0, sizeof(message));
+    message.msg_name = &dest_addr;
     message.msg_iov = packet->iov;
     message.msg_iovlen = 2;
+    message.msg_namelen = sizeof(struct sockaddr_in);
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
     if (bytes_sent < 0) {
@@ -935,8 +950,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
 
         // Receive echoed message
         memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
-        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip,
-                                                         dest_ip, pid);
+        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip,dest_ip, pid);
         if (packets_received == ERROR) {
             fprintf(stderr, "Error occurred while receiving packets.\n");
             goto cleanup;
@@ -949,22 +963,24 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
         fprintf(stdout, "%s", msg_buff);
         fprintf(stdout, "%d", packets_received);
 
-/*
+
         // Echo the received message back to the client
-        failed_packets = send_packet_collection(socket, packets_received, received_packets, failed_packet_seq,pid);
+        failed_packets = send_packet_collection(socket, packets_received, received_packets, failed_packet_seq,pid,src_ip,dest_ip);
         if (failed_packets != SUCCESS) {
             fprintf(stderr, "Error occurred while sending echoed packets.\n");
             goto cleanup;
         }
 
-*/
     }
 
 
     cleanup:
+    for(int i=0;i < MAX_PACKET_COLLECTION;i++){
+        free(packets[i]);
+    }
 
     // Handle connection close
-    if (handle_close(socket, src_ip, dest_ip, pid) == ERROR) {
+    if (handle_close(socket, src_ip, dest_ip, pid) != SUCCESS) {
         fprintf(stderr, "Error occurred while handling connection close.\n");
     }
 

@@ -87,7 +87,6 @@ uint16_t fill_ip_header(struct iphdr *ip_header, uint32_t src_ip, uint32_t dst_i
 
 int16_t compare_ip_checksum(struct iphdr *ip_hdr){
     uint16_t check = ip_hdr->check;
-    printf("%i",check);
     memset(&ip_hdr->check,0,sizeof(uint16_t));
     uint16_t new_check;
     new_check = checksum(ip_hdr,sizeof (struct iphdr));
