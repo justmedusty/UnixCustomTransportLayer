@@ -747,7 +747,7 @@ uint16_t send_packet_collection(int socket, uint16_t num_packets, Packet *packet
  *
  */
 
-uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip, uint16_t pid) {
+uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16_t *packets_to_resend, uint32_t src_ip,uint32_t dst_ip, uint16_t pid,uint16_t *status) {
     memset(packets_to_resend, 0, MAX_PACKET_COLLECTION);
     int i = 0;
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
@@ -855,13 +855,14 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
                     write(1,"OOB\n",4);
                     oob_data = data[0];
                     raise(SIGINT);
+                    *status = OOB;
                     break;
 
                 case CLOSE:
                     write(1,"CLOSE\n",6);
                     close(socket);
                     reset_timeout();
-                    return CLOSE;
+                    *status = CLOSE;
 
                 case CORRUPTION :
                     packets_to_resend[++bad_packets] = head->sequence;
@@ -879,7 +880,8 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
                 case ACKNOWLEDGE:
                     write(1,"ACK\n",4);
                     reset_timeout();
-                    return RECEIVED_ACK;
+                    *status = RECEIVED_ACK;
+                    break;
 
 
                 case SECOND_SEND :
@@ -902,6 +904,9 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
                     }
                     break;
 
+            }
+            if(*status == RECEIVED_ACK || *status == CLOSE || *status == OOB ){
+                break;
             }
         }
         packets_received++;
@@ -947,6 +952,8 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
     signal(SIGINT, sig_int_handler);
     signal(SIGALRM, sigalrm_handler);
 
+    uint16_t status = 0;
+
 
     char msg_buff[4096];
 
@@ -975,15 +982,20 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
 
         // Receive echoed message
         memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
-        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip,dest_ip, pid);
+        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip,dest_ip, pid,&status);
         if (packets_received == ERROR) {
             fprintf(stderr, "Error occurred while receiving packets.\n");
             goto cleanup;
         }
+        if(status != RECEIVED_ACK){
+            continue;
+        }
 
-        dump_packet_collection_payload_into_buffer(received_packets, (char *) &msg_buff, 4096, packets_received);
+        if (dump_packet_collection_payload_into_buffer(received_packets, (char *) &msg_buff, 4096, packets_received) == NO_BUFFER_SPACE){
+            fprintf(stderr,"Error dumping packets into data buffer, not enough buffer space\n");
+        }
 
-        fprintf(stdout, "%s", msg_buff);
+        fprintf(stdout, "Message : %s\n", msg_buff);
 
 
         // Echo the received message back to the client
