@@ -10,7 +10,7 @@
 
 uint16_t fill_ip_header(struct iphdr *ip_header, uint32_t src_ip, uint32_t dst_ip);
 
-unsigned short checksum(void *b, int len);
+uint16_t checksum(struct iphdr *ip_hdr, int len);
 
 uint16_t get_ip_header_wire_ready(struct iphdr (*ip_header));
 

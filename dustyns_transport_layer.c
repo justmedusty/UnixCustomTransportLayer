@@ -528,6 +528,12 @@ send_missing_packets(int socket, uint16_t *sequence[], uint16_t num_packets, Pac
         header.status = SECOND_SEND;
         packet_collection[*sequence[i]]->iov[1].iov_base = &header;
         struct msghdr message;
+        struct sockaddr_in destination;
+        memset(&destination, 0, sizeof(destination));
+        destination.sin_family = AF_INET;
+        destination.sin_addr.s_addr = inet_addr("127.0.0.1");
+        message.msg_name = &destination;
+        message.msg_namelen = sizeof(struct sockaddr_in);
         memset(&message, 0, sizeof(message));
         message.msg_iov = packet_collection[*sequence[i]]->iov;
         message.msg_iovlen = 3;
@@ -569,6 +575,12 @@ uint16_t send_oob_data(int socket, char oob_char, uint32_t src_ip, uint32_t dst_
     packet->iov[2].iov_len = OUT_OF_BAND_DATA_SIZE;
 
     struct msghdr message;
+    struct sockaddr_in destination;
+    memset(&destination, 0, sizeof(destination));
+    destination.sin_family = AF_INET;
+    destination.sin_addr.s_addr = inet_addr("127.0.0.1");
+    message.msg_name = &destination;
+    message.msg_namelen = sizeof(struct sockaddr_in);
     memset(&message, 0, sizeof(message));
     message.msg_iov = packet->iov;
     message.msg_iovlen = 2;
@@ -742,6 +754,8 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
     struct msghdr msg;
     struct iovec iov[3];
 
+    pid = 500;
+
 // Initialize the msghdr struct
     msg.msg_name = NULL;
     msg.msg_namelen = 0;
@@ -832,11 +846,13 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
                  * We'll send an interrupt signal when OOB data is discovered
                  */
                 case OOB:
+                    write(1,"OOB\n",4);
                     oob_data = data[0];
                     raise(SIGINT);
                     break;
 
                 case CLOSE:
+                    write(1,"CLOSE\n",6);
                     close(socket);
                     reset_timeout();
                     return CLOSE;
@@ -848,17 +864,20 @@ uint16_t receive_data_packets(Packet **receiving_packet_list, int socket, uint16
 
 
                 case RESEND :
+                    write(1,"RESENDREQ\n",10);
                     packets_to_resend[++bad_packets] = head->sequence;
                     bad_packets++;
                     break;
 
 
                 case ACKNOWLEDGE:
+                    write(1,"ACK\n",4);
                     reset_timeout();
                     return RECEIVED_ACK;
 
 
                 case SECOND_SEND :
+                    write(1,"RESEND\n",7);
                     if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
                         memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
                         handle_corruption(socket, src_ip, dst_ip, head->sequence, pid);
@@ -956,12 +975,9 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
             goto cleanup;
         }
 
-        fprintf(stdout, "Messages received\n");
-
         dump_packet_collection_payload_into_buffer(received_packets, (char *) &msg_buff, 4096, packets_received);
 
         fprintf(stdout, "%s", msg_buff);
-        fprintf(stdout, "%d", packets_received);
 
 
         // Echo the received message back to the client

@@ -14,15 +14,15 @@
  */
 
 
-unsigned short checksum(void *b, int len) {
+uint16_t checksum(struct iphdr *ip_hdr, int len) {
     // Cast the input pointer to an unsigned short pointer
-    unsigned short *buf = b;
+    uint16_t *buf = (uint16_t *) ip_hdr;
 
     // Initialize the sum variable
-    unsigned int sum = 0;
+    uint32_t sum = 0;
 
     // Declare a variable to hold the checksum result
-    unsigned short result;
+    uint16_t result;
 
     // Iterate over the data buffer, summing up 16-bit words
     for (sum = 0; len > 1; len -= 2) {
@@ -76,9 +76,11 @@ uint16_t fill_ip_header(struct iphdr *ip_header, uint32_t src_ip, uint32_t dst_i
         return ERROR;
     }
 
+    get_ip_header_wire_ready(ip_header);
+
     ip_header->check = checksum(ip_header, sizeof(struct iphdr));
 
-    get_ip_header_wire_ready(ip_header);
+
 
     return SUCCESS;
 
@@ -86,14 +88,21 @@ uint16_t fill_ip_header(struct iphdr *ip_header, uint32_t src_ip, uint32_t dst_i
 }
 
 int16_t compare_ip_checksum(struct iphdr *ip_hdr){
+   // get_ip_header_host_ready(ip_hdr);
     uint16_t check = ip_hdr->check;
     memset(&ip_hdr->check,0,sizeof(uint16_t));
     uint16_t new_check;
     new_check = checksum(ip_hdr,sizeof (struct iphdr));
 
+
     if(check != new_check){
+        printf("Check mismatch , check %d new check %d \n",check,new_check);
+        fflush(stdout);
         return -1;
     }
+    ip_hdr->check = new_check;
+    printf("SUCCESS MATCH\n");
+    fflush(stdout);
     return SUCCESS;
 }
 
