@@ -61,8 +61,7 @@ typedef struct Header {
 
 } Header;
 
-uint16_t handle_ack(int socket, Packet **packets, uint32_t src_ip, uint32_t dest_ip, uint16_t pid);
-
+uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t src_ip, uint32_t dest_ip, uint16_t pid);
 uint16_t allocate_packet(Packet **packet_ptr);
 
 uint16_t free_packet(Packet **packet);

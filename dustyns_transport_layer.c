@@ -323,7 +323,7 @@ uint8_t compare_checksum(char data[], size_t length, uint16_t received_checksum)
  * Also sending out RESEND messages to the other side with the packet sequence number that will need to be sent back.
  */
 
-uint16_t handle_ack(int socket, Packet **packets, uint32_t src_ip, uint32_t dest_ip, uint16_t pid) {
+uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t src_ip, uint32_t dest_ip, uint16_t pid) {
 
     bool sequence_received[MAX_PACKET_COLLECTION + 1] = {false}; // Initialize all to false
     int last_received = -1;
@@ -331,13 +331,13 @@ uint16_t handle_ack(int socket, Packet **packets, uint32_t src_ip, uint32_t dest
     int highest_packet_received;
 
     // Iterate through each packet in the collection
-    for (int i = 0; i < MAX_PACKET_COLLECTION; ++i) {
+    for (int i = 0; i < (num_packets + 1); i++) {
         Packet *packet = packets[i];
 
         if (packet == NULL) break;
 
 
-        Header *header = (Header *) packet->iov[1].iov_base;
+        Header *header = packet->iov[1].iov_base;
         if(header->dest_process_id != pid){
             fprintf(stdout,"Packet for another process\n");
             free_packet(&packets[i]);
@@ -760,7 +760,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
     struct msghdr msg;
     struct iovec iov[3];
-
+    uint16_t dest_pid = pid;
     pid = 500;
 
 // Initialize the msghdr struct
@@ -805,8 +805,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
-        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, (struct iphdr *) &msg.msg_iov->iov_base[20],
-               20);
+        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, (struct iphdr *) &msg.msg_iov->iov_base[20],20);
         memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 12);
         memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], 512);
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
@@ -849,7 +848,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         char data[head->msg_size];
 
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
-            (return_value = handle_ack(socket, receiving_packet_list, src_ip, dst_ip, pid)) == SUCCESS)){
+            (return_value = handle_ack(socket, receiving_packet_list,(packets_received + 1), src_ip, dst_ip, dest_pid)) == SUCCESS)){
             printf("got last packet successfully\n");
             fflush(stdout);
             return SUCCESS;
