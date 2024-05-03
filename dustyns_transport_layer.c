@@ -758,22 +758,18 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
     struct msghdr msg;
     struct iovec iov[3];
 
-// Initialize the msghdr struct
+    iov[0].iov_base = malloc(PACKET_SIZE + 20);
+    iov[0].iov_len = PACKET_SIZE + 20;
+
     msg.msg_name = NULL;
     msg.msg_namelen = 0;
     msg.msg_iov = iov;
-    msg.msg_iovlen = 3;
+    msg.msg_iovlen = 1;
     msg.msg_control = malloc(128);
     msg.msg_controllen = 128;
     msg.msg_flags = 0;
 
-// Initialize the iovec structs
-    iov[0].iov_base = malloc(PACKET_SIZE);
-    iov[0].iov_len = PACKET_SIZE;
-    iov[1].iov_base = malloc(HEADER_SIZE);
-    iov[1].iov_len = HEADER_SIZE;
-    iov[2].iov_base = malloc(PAYLOAD_SIZE);
-    iov[2].iov_len = PAYLOAD_SIZE;
+
 
     struct iphdr *ip_hdr;
     Header *head;
@@ -800,9 +796,9 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
 
         allocate_packet(&receiving_packet_list[packets_received]);
 
-        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, (struct iphdr *) &msg.msg_iov->iov_base[20],20);
-        memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 12);
-        memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], 512);
+        memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, (struct iphdr *) &msg.msg_iov->iov_base[20],sizeof(struct iphdr));
+        memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], HEADER_SIZE);
+        memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], PAYLOAD_SIZE);
 
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
         ip_hdr = (struct iphdr *) receiving_packet_list[packets_received]->iov[0].iov_base;
@@ -845,7 +841,6 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
             printf("%d sequence\n",head->sequence);
 
         }
-
         fflush(stdout);
 
         char data[head->msg_size];
