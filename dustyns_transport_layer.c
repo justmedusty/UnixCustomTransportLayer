@@ -338,7 +338,7 @@ uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t 
 
 
         Header *header = packet->iov[1].iov_base;
-        if(header->dest_process_id != pid){
+        if(header->dest_process_id != SERVER_PID){
             fprintf(stdout,"Packet for another process\n");
             free_packet(&packets[i]);
         }
@@ -364,10 +364,11 @@ uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t 
 
     } else {
 
-        if (send_ack(socket, highest_packet_received, src_ip, dest_ip, pid) != SUCCESS) {
+        if (send_ack(socket, highest_packet_received, src_ip,dest_ip, pid) != SUCCESS) {
             return ERROR;
         }
-
+        printf("SEND ACK\n");
+        fflush(stdout);
         return SUCCESS;
 
     }
@@ -760,8 +761,6 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
     memset(receiving_packet_list, 0, MAX_PACKET_COLLECTION);
     struct msghdr msg;
     struct iovec iov[3];
-    uint16_t dest_pid = pid;
-    pid = 500;
 
 // Initialize the msghdr struct
     msg.msg_name = NULL;
@@ -827,7 +826,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
             continue;
         }
 
-        if (head->dest_process_id != 1000) {
+        if (head->dest_process_id != SERVER_PID) {
             /*
              * This is for another process, continue the loop
              */
@@ -848,7 +847,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         char data[head->msg_size];
 
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
-            (return_value = handle_ack(socket, receiving_packet_list,(packets_received + 1), src_ip, dst_ip, dest_pid)) == SUCCESS)){
+            (return_value = handle_ack(socket, receiving_packet_list,(packets_received + 1), src_ip, dst_ip,pid)) == SUCCESS)){
             printf("got last packet successfully\n");
             fflush(stdout);
             return SUCCESS;

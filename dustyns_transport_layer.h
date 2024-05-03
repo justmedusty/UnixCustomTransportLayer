@@ -42,6 +42,8 @@
 // 65536 would never come up so this makes more sense as the error code.
 #define ERROR 65535
 
+#define SERVER_PID 1000
+
 
 typedef struct Packet {
     struct iovec iov[3];
