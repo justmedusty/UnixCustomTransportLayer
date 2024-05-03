@@ -809,10 +809,9 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
 
         char buff[head->msg_size];
         if(head->status == DATA || head->status == SECOND_SEND){
-            memset(buff,0,sizeof buff);
+            memset(buff,0,head->msg_size);
             memcpy(&buff, receiving_packet_list[packets_received]->iov[2].iov_base, head->msg_size);
-            printf("%s", buff);
-            fflush(stdout);
+            write(1,&buff,head->msg_size);
         }
 
 
@@ -839,7 +838,14 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
             }
             continue;
         }
-        printf("%d sequence \n",head->sequence);
+        if(head->msg_size == PAYLOAD_SIZE){
+            printf("\n%d sequence\n",head->sequence);
+        }else{
+
+            printf("%d sequence\n",head->sequence);
+
+        }
+
         fflush(stdout);
 
         char data[head->msg_size];
