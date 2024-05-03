@@ -137,10 +137,6 @@ packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, ui
             exit(EXIT_FAILURE);
         }
 
-        printf("%d\n", ip_hdr.daddr);
-
-
-
 
         /*  Calculate the number of bytes to copy into this packet.
             If the remaining bytes to copy (remaining_bytes) is greater than the size of the payload buffer (PAYLOAD_SIZE),
@@ -367,7 +363,7 @@ uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t 
         if (send_ack(socket, highest_packet_received, src_ip,dest_ip, pid) != SUCCESS) {
             return ERROR;
         }
-        printf("SEND ACK\n");
+        fprintf(stdout,"SENT ACK\n");
         fflush(stdout);
         return SUCCESS;
 
@@ -807,17 +803,20 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         memcpy(receiving_packet_list[packets_received]->iov[0].iov_base, (struct iphdr *) &msg.msg_iov->iov_base[20],20);
         memcpy(receiving_packet_list[packets_received]->iov[1].iov_base, &msg.msg_iov->iov_base[40], 12);
         memcpy(receiving_packet_list[packets_received]->iov[2].iov_base, &msg.msg_iov->iov_base[52], 512);
+
         head = receiving_packet_list[packets_received]->iov[1].iov_base;
+        ip_hdr = (struct iphdr *) receiving_packet_list[packets_received]->iov[0].iov_base;
+
         char buff[head->msg_size];
         if(head->status == DATA || head->status == SECOND_SEND){
+            memset(buff,0,sizeof buff);
             memcpy(&buff, receiving_packet_list[packets_received]->iov[2].iov_base, head->msg_size);
-            printf("%s\n", buff);
+            printf("%s", buff);
+            fflush(stdout);
         }
 
 
 
-        ip_hdr = (struct iphdr *) receiving_packet_list[packets_received]->iov[0].iov_base;
-        head = receiving_packet_list[packets_received]->iov[1].iov_base;
 
         if (ip_hdr->saddr != dst_ip) {
             /*
@@ -843,13 +842,11 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         printf("%d sequence \n",head->sequence);
         fflush(stdout);
 
-
         char data[head->msg_size];
 
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
             (return_value = handle_ack(socket, receiving_packet_list,(packets_received + 1), src_ip, dst_ip,pid)) == SUCCESS)){
             printf("got last packet successfully\n");
-            fflush(stdout);
             return SUCCESS;
         } else {
             if (return_value == ERROR) {
@@ -872,6 +869,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
                     close(socket);
                     reset_timeout();
                     *status = CLOSE;
+                    break;
 
                 case CORRUPTION :
                     write(1,"CORRUPTION\n",11);
@@ -996,8 +994,15 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
             fprintf(stderr, "Error occurred while receiving packets.\n");
             goto cleanup;
         }
+
         if(status != RECEIVED_ACK && status != CLOSE){
             continue;
+        }
+
+        if(status == CLOSE){
+            printf("Client closed connection\n");
+            fflush(stdout);
+            goto cleanup;
         }
 
         if (dump_packet_collection_payload_into_buffer(received_packets, (char *) &msg_buff, 4096, packets_received) == NO_BUFFER_SPACE){
@@ -1021,10 +1026,10 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
     for(int i=0;i < MAX_PACKET_COLLECTION;i++){
         free(packets[i]);
     }
-
-    // Handle connection close
-    if (handle_close(socket, src_ip, dest_ip, pid) != SUCCESS) {
-        fprintf(stderr, "Error occurred while handling connection close.\n");
+    if(status != CLOSE){
+        if (handle_close(socket, src_ip, dest_ip, pid) != SUCCESS) {
+            fprintf(stderr, "Error occurred while handling connection close.\n");
+        }
     }
 
     close(socket);
