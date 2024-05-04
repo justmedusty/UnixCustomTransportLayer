@@ -323,7 +323,7 @@ uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t 
     int highest_packet_received;
 
     // Iterate through each packet in the collection
-    for (int i = 0; i <= (num_packets + 1); i++) {
+    for (int i = 0; i <= (num_packets); i++) {
         Packet *packet = packets[i];
 
         if (packet == NULL) break;
@@ -357,7 +357,6 @@ uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t 
         return missing_packets;
 
     } else {
-
         if (send_ack(socket, highest_packet_received, src_ip,dest_ip, pid) != SUCCESS) {
             return ERROR;
         }
@@ -413,6 +412,10 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
     message.msg_namelen = sizeof(struct sockaddr_in);
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
+    usleep(75);
+    bytes_sent = sendmsg(socket, &message, 0);
+
+
 
     if (bytes_sent < 0) {
         perror("sendmsg");
@@ -914,7 +917,10 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
                         if(receiving_packet_list[head->sequence] == NULL){
                             allocate_packet(&receiving_packet_list[head->sequence]);
                        }
-                        memcpy(receiving_packet_list[head->sequence]->iov[2].iov_base,buff,head->msg_size);
+                        if(receiving_packet_list[head->sequence] == NULL){
+                            allocate_packet(&receiving_packet_list[head->sequence]);
+                        }
+                        memcpy(receiving_packet_list[head->sequence]->iov[2].iov_base,buff,head->msg_size - 1);
                       //  receiving_packet_list[head->sequence]->iov[2].iov_base = buff;
                     }
                     break;
