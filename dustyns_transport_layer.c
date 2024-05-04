@@ -327,7 +327,7 @@ uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t 
     int highest_packet_received;
 
     // Iterate through each packet in the collection
-    for (int i = 0; i < num_packets; i++) {
+    for (int i = 0; i <= (num_packets + 1); i++) {
         Packet *packet = packets[i];
 
         if (packet == NULL) break;
@@ -351,6 +351,8 @@ uint16_t handle_ack(int socket, Packet **packets,uint16_t num_packets, uint32_t 
         if (!sequence_received[i]) {
             // Packet with sequence i is missing, send RESEND
             send_resend(socket, i, src_ip, dest_ip, pid);
+            printf("SENDING RESEND\n");
+            fflush(stdout);
             missing_packets += 1;
         }
     }
@@ -521,8 +523,7 @@ uint16_t handle_corruption(int socket, uint32_t src_ip, uint32_t dst_ip, uint16_
  * sent.
  */
 
-uint16_t
-send_missing_packets(int socket, uint16_t *sequence[], uint16_t num_packets, Packet **packet_collection, uint16_t pid) {
+uint16_t send_missing_packets(int socket, uint16_t *sequence[], uint16_t num_packets, Packet **packet_collection, uint16_t pid) {
 
 
     for (int i = 0; i < num_packets; i++) {
@@ -532,16 +533,15 @@ send_missing_packets(int socket, uint16_t *sequence[], uint16_t num_packets, Pac
         header.status = SECOND_SEND;
         packet_collection[*sequence[i]]->iov[1].iov_base = &header;
         struct msghdr message;
+        memset(&message, 0, sizeof(message));
         struct sockaddr_in destination;
         memset(&destination, 0, sizeof(destination));
         destination.sin_family = AF_INET;
         destination.sin_addr.s_addr = inet_addr("127.0.0.1");
         message.msg_name = &destination;
         message.msg_namelen = sizeof(struct sockaddr_in);
-        memset(&message, 0, sizeof(message));
         message.msg_iov = packet_collection[*sequence[i]]->iov;
         message.msg_iovlen = 3;
-
         ssize_t bytes_sent = sendmsg(socket, &message, 0);
 
         if (bytes_sent < 0) {
@@ -846,7 +846,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         char data[head->msg_size];
 
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
-            (return_value = handle_ack(socket, receiving_packet_list,(packets_received + 1), src_ip, dst_ip,pid)) == SUCCESS)){
+            (return_value = handle_ack(socket, receiving_packet_list,packets_received, src_ip, dst_ip,pid)) == SUCCESS)){
             printf("got last packet successfully\n");
             return SUCCESS;
         } else {
@@ -908,6 +908,9 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
                         memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
                         handle_corruption(socket, src_ip, dst_ip, head->sequence, pid);
                     } else {
+                        if(receiving_packet_list[head->sequence] == NULL){
+                            allocate_packet(&receiving_packet_list[head->sequence]);
+                       }
                         memcpy(receiving_packet_list[head->sequence]->iov[2].iov_base,buff,head->msg_size);
                       //  receiving_packet_list[head->sequence]->iov[2].iov_base = buff;
                     }
@@ -1012,6 +1015,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
         }
 
         fprintf(stdout, "Message : %s\n", msg_buff);
+        fflush(stdout);
 
 
         // Echo the received message back to the client
