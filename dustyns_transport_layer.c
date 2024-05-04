@@ -1007,7 +1007,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
             fprintf(stderr,"Error dumping packets into data buffer, not enough buffer space\n");
         }
         msg_buff[strlen(msg_buff)] = '\0';
-        fprintf(stdout, "Length : %lo ,Full Message: %s\n", strlen(msg_buff),msg_buff);
+        fprintf(stdout, "Length : %zu ,Full Message: %s\n", strlen(msg_buff),msg_buff);
         fflush(stdout);
         memset(msg_buff,0,512000);
 
