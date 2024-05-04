@@ -37,6 +37,7 @@
 #define MAX_TIMEOUT 160
 #define SUCCESS 0
 #define RECEIVED_ACK 6969
+#define SENT_ACK 6060
 //This because they're all unsigned 16 bits,
 // so this makes more sense than using 1 since if 1 packet was missing, for example, it would also return 1.
 // 65536 would never come up so this makes more sense as the error code.
@@ -105,7 +106,7 @@ uint16_t missing_packets(int socket, uint16_t sequence, uint32_t src_ip, uint32_
 
 void sigalrm_handler();
 
-uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char data_buff[], uint64_t buff_size,
+uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char *data_buff[], uint64_t buff_size,
                                                     uint16_t packet_array_len);
 
 #endif //UNIXCUSTOMTRANSPORTLAYER_DUSTYNS_TRANSPORT_LAYER_H

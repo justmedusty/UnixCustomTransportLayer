@@ -178,17 +178,15 @@ packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, ui
  * We will use strcat since it handles null termination for us, memcpy doesnt. This will change I will
  * come back to this later.
  */
-uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char data_buff[], uint64_t buff_size,uint16_t packet_array_len) {
-    uint64_t buffer_max = 0;
+uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char *data_buff[], uint64_t buff_size,uint16_t packet_array_len) {
 
-    for (int i = 0; i < packet_array_len; i++) {
-
+    for (int i = 0; i < packet_array_len + 1; i++) {
+        uint64_t buffer_space_taken = 0;
         Header *head = packet[i]->iov[1].iov_base;
-        if(head->status != DATA && head->status != RESEND){
-            strcat(data_buff, packet[i]->iov[2].iov_base);
-            buff_size += head->msg_size;
-
-            if (buffer_max >= (buff_size - 256)) {
+        if(head->status == DATA || head->status != RESEND){
+            strcat(*data_buff, packet[i]->iov[2].iov_base);
+            buffer_space_taken += head->msg_size;
+            if (buffer_space_taken >= (buff_size - 256)) {
                 return NO_BUFFER_SPACE;
             }
         }
@@ -587,11 +585,11 @@ uint16_t send_oob_data(int socket, char oob_char, uint32_t src_ip, uint32_t dst_
     struct msghdr message;
     struct sockaddr_in destination;
     memset(&destination, 0, sizeof(destination));
+    memset(&message, 0, sizeof(message));
     destination.sin_family = AF_INET;
     destination.sin_addr.s_addr = inet_addr("127.0.0.1");
     message.msg_name = &destination;
     message.msg_namelen = sizeof(struct sockaddr_in);
-    memset(&message, 0, sizeof(message));
     message.msg_iov = packet->iov;
     message.msg_iovlen = 2;
 
@@ -854,7 +852,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
 
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
             (return_value = handle_ack(socket, receiving_packet_list,packets_received, src_ip, dst_ip,pid)) == SUCCESS)){
-            printf("got last packet successfully\n");
+            *status = SENT_ACK;
             return SUCCESS;
         } else {
             if (return_value == ERROR) {
@@ -974,42 +972,29 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
     uint16_t status = 0;
 
 
-    char msg_buff[4096];
-
-    // Prepare welcome message
-    const char welcome_msg[] = "Welcome to the raw socket server!";
-
-    uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
-    uint16_t packets_filled = packetize_data(packets, (char *) welcome_msg, 1, src_ip, dest_ip, pid);
-    if (packets_filled == ERROR) {
-        fprintf(stderr, "Error occurred while packetizing data.\n");
-        goto cleanup;
+    char *msg_buff = malloc(512000);
+    if(msg_buff == NULL){
+        perror("malloc");
+        exit(EXIT_FAILURE);
     }
 
-
+    uint16_t failed_packet_seq[MAX_PACKET_COLLECTION];
     uint16_t failed_packets;
-    // Packetize and send welcome message
-
-    //  = send_packet_collection(socket, packets_filled, packets, failed_packet_seq,pid);
-    //  if (failed_packets != SUCCESS) {
-    //     fprintf(stderr, "Error occurred while sending packets.\n");
-    //     goto cleanup;
-    //  }
-
 
     while (true) {
 
         // Receive echoed message
         memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
-        uint16_t packets_received = receive_data_packets(&received_packets, socket, failed_packet_seq, src_ip,dest_ip, pid,&status);
+        uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip,dest_ip, pid,&status);
         if (packets_received == ERROR) {
             fprintf(stderr, "Error occurred while receiving packets.\n");
             goto cleanup;
         }
 
-        if(status != RECEIVED_ACK && status != CLOSE){
+        if(status != SENT_ACK){
             continue;
         }
+
 
         if(status == CLOSE){
             printf("Client closed connection\n");
@@ -1017,7 +1002,7 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
             goto cleanup;
         }
 
-        if (dump_packet_collection_payload_into_buffer(received_packets, (char *) &msg_buff, 4096, packets_received) == NO_BUFFER_SPACE){
+        if (dump_packet_collection_payload_into_buffer(received_packets, &msg_buff, 512000, packets_received) == NO_BUFFER_SPACE){
             fprintf(stderr,"Error dumping packets into data buffer, not enough buffer space\n");
         }
 
