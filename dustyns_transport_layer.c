@@ -776,16 +776,16 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
     uint16_t return_value = SUCCESS;
     int bad_packets = 0;
     int packets_received = 0;
-    ssize_t packets_sniffed = 1;
+    ssize_t bytes_received = 1;
 
 
     while (true) {
-        packets_sniffed = recvmsg(socket, &msg, 0);
+        bytes_received = recvmsg(socket, &msg, 0);
 
-        if(packets_sniffed == 0){
+        if(bytes_received == 0){
             break;
         }
-        if (packets_sniffed < 0) {
+        if (bytes_received < 0) {
             perror("recvmsg");
             exit(EXIT_FAILURE);
         }
