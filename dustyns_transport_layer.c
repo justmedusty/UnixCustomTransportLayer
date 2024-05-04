@@ -411,9 +411,8 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
     message.msg_name = &destination;
     message.msg_namelen = sizeof(struct sockaddr_in);
 
+    usleep(100);
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
-    usleep(75);
-    bytes_sent = sendmsg(socket, &message, 0);
 
 
 
