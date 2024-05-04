@@ -453,6 +453,12 @@ uint16_t send_resend(int socket, uint16_t sequence, uint32_t src_ip, uint32_t ds
     memset(&message, 0, sizeof(message));
     message.msg_iov = packet->iov;
     message.msg_iovlen = 2;
+    struct sockaddr_in destination;
+    memset(&destination, 0, sizeof(destination));
+    destination.sin_family = AF_INET;
+    destination.sin_addr.s_addr = inet_addr("127.0.0.1");
+    message.msg_name = &destination;
+    message.msg_namelen = sizeof(struct sockaddr_in);
 
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
 
@@ -844,6 +850,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         fflush(stdout);
 
         char data[head->msg_size];
+        memcpy(data,&buff,head->msg_size);
 
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
             (return_value = handle_ack(socket, receiving_packet_list,packets_received, src_ip, dst_ip,pid)) == SUCCESS)){
