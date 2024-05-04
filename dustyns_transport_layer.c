@@ -178,20 +178,18 @@ packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, ui
  * We will use strcat since it handles null termination for us, memcpy doesnt. This will change I will
  * come back to this later.
  */
-uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char *data_buff[], uint64_t buff_size,uint16_t packet_array_len) {
+uint16_t dump_packet_collection_payload_into_buffer(Packet *packet[], char **data_buff, uint64_t buff_size,uint16_t packet_array_len) {
+    uint64_t buffer_space_taken = 0;
 
-    for (int i = 0; i < packet_array_len + 1; i++) {
-        uint64_t buffer_space_taken = 0;
+    for (int i = 0; i < (packet_array_len + 1); i++) {
         Header *head = packet[i]->iov[1].iov_base;
-        if(head->status == DATA || head->status != RESEND){
-            strcat(*data_buff, packet[i]->iov[2].iov_base);
+        if(head->status == DATA || head->status == RESEND){
+            memcpy(*data_buff + buffer_space_taken, packet[i]->iov[2].iov_base,head->msg_size);
             buffer_space_taken += head->msg_size;
             if (buffer_space_taken >= (buff_size - 256)) {
                 return NO_BUFFER_SPACE;
             }
         }
-
-
 
     }
     return SUCCESS;
@@ -853,7 +851,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
             (return_value = handle_ack(socket, receiving_packet_list,packets_received, src_ip, dst_ip,pid)) == SUCCESS)){
             *status = SENT_ACK;
-            return SUCCESS;
+            return packets_received;
         } else {
             if (return_value == ERROR) {
                 return ERROR;
@@ -923,14 +921,14 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
 
             }
             if(*status == RECEIVED_ACK || *status == CLOSE || *status == OOB ){
-                break;
+                return packets_received;
             }
         }
         packets_received++;
     }
 
 
-    return packets_received;
+
 }
 
 /*
@@ -984,12 +982,15 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
     while (true) {
 
         // Receive echoed message
+
         memset(&failed_packet_seq, 0, MAX_PACKET_COLLECTION);
         uint16_t packets_received = receive_data_packets(received_packets, socket, failed_packet_seq, src_ip,dest_ip, pid,&status);
         if (packets_received == ERROR) {
             fprintf(stderr, "Error occurred while receiving packets.\n");
             goto cleanup;
         }
+
+        fflush(stdout);
 
         if(status != SENT_ACK){
             continue;
@@ -1005,17 +1006,19 @@ void handle_client_connection(int socket, uint32_t src_ip, uint32_t dest_ip, uin
         if (dump_packet_collection_payload_into_buffer(received_packets, &msg_buff, 512000, packets_received) == NO_BUFFER_SPACE){
             fprintf(stderr,"Error dumping packets into data buffer, not enough buffer space\n");
         }
-
-        fprintf(stdout, "Message : %s\n", msg_buff);
+        msg_buff[strlen(msg_buff)] = '\0';
+        fprintf(stdout, "Length : %lo ,Full Message: %s\n", strlen(msg_buff),msg_buff);
         fflush(stdout);
+        memset(msg_buff,0,512000);
 
-
+/*
         // Echo the received message back to the client
         failed_packets = send_packet_collection(socket, packets_received, received_packets, failed_packet_seq,pid,src_ip,dest_ip);
         if (failed_packets != SUCCESS) {
             fprintf(stderr, "Error occurred while sending echoed packets.\n");
             goto cleanup;
         }
+        */
 
     }
 
