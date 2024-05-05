@@ -102,8 +102,7 @@ uint16_t free_packet(Packet **packet) {
  * include proper message size, provide a checksum for the data, fill in the layer 3 header.
  *
  */
-uint16_t
-packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip, uint32_t dest_ip,
+uint16_t packetize_data(Packet *packet[], char data_buff[], uint16_t packet_array_len, uint32_t src_ip, uint32_t dest_ip,
                uint16_t pid) {
 
     //Check they are not passing a packet array larger than the max
@@ -411,7 +410,7 @@ uint16_t send_ack(int socket, uint16_t max_sequence, uint32_t src, uint32_t dest
     message.msg_name = &destination;
     message.msg_namelen = sizeof(struct sockaddr_in);
 
-    usleep(100);
+    usleep(50);
     ssize_t bytes_sent = sendmsg(socket, &message, 0);
 
 
@@ -850,10 +849,17 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
         char data[head->msg_size];
         memcpy(data,&buff,head->msg_size);
 
-        if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence &&
-            (return_value = handle_ack(socket, receiving_packet_list,packets_received, src_ip, dst_ip,pid)) == SUCCESS)){
-            *status = SENT_ACK;
-            return packets_received;
+        if ((head->status == DATA || head->status == SECOND_SEND) && (head->packet_end == head->sequence)){
+            if(bad_packets > 0){
+                continue;
+            } else{
+                return_value = handle_ack(socket, receiving_packet_list,packets_received, src_ip, dst_ip,pid);
+                if(return_value!= SUCCESS){
+                    return ERROR;
+                }
+                *status = SENT_ACK;
+                return packets_received;
+            }
         } else {
             if (return_value == ERROR) {
                 return ERROR;
@@ -901,6 +907,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
                 case SECOND_SEND :
                     write(1,"RESEND\n",7);
                     if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
+                        bad_packets++;
                         memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
                         handle_corruption(socket, src_ip, dst_ip, head->sequence, pid);
                     } else {
@@ -911,6 +918,7 @@ uint16_t receive_data_packets(Packet *receiving_packet_list[], int socket, uint1
                 case DATA:
                     if (compare_checksum(data, head->msg_size, head->checksum) != SUCCESS) {
                         memset(&receiving_packet_list[head->sequence], 0, sizeof(Packet));
+                        bad_packets++;
                         handle_corruption(socket, src_ip, dst_ip, head->sequence, pid);
                     } else {
                         if(receiving_packet_list[head->sequence] == NULL){
